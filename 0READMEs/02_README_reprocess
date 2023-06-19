@@ -1,0 +1,32 @@
+#! /bin/bash
+
+i=$1
+n=$2
+
+. ~/.bash_aliases
+shopt -s expand_aliases
+
+ciao -o
+
+. src/functions.bash
+. /data/legs/rpete/flight/analysis_functions/tmppdir.bash
+
+tg_reprocess=/data/legs/rpete/flight/dev/tg_reprocess
+
+# list of obsids
+obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids($i,$n)")
+obsids=$(perl -le 'print join " ", (24546..24566)')
+
+# whether to force reprocessing if tg_reprocess output already exists
+force=1
+
+for o in $obsids
+do
+    dir=$datadir/$o
+    outdir=$dir/tg_reprocess
+
+    [ -f $outdir/*_evt2.fits -a $force -eq 0 ] && continue
+
+    $perl $tg_reprocess --badpix=CALDB $dir --dtffilter=0.98 2>&1 | tee $dir/tg_reprocess.log
+    rm $outdir/*evt1{,a}.fits
+done

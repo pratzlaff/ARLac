@@ -1,0 +1,23 @@
+to convert angstroms to hz:
+IDL> x = angstrom
+IDL> y = CM(CM(x,/ang),/hz,/inv)
+
+to convert angstroms to eV:
+IDL> x = angstrom
+IDL> y = ERG(ERG(CM(CM(x,/ang),/hz,/inv),/hz),/ev,/inv)
+
+to convert angstroms to K:
+IDL> x = angstrom
+IDL> y = ERG(ERG(CM(CM(x,/ang),/hz,/inv),/hz),/degK,/inv)
+
+to convert eV to hz:
+IDL> x = eV
+IDL> y = ERG(ERG(x,/ev),/hz,/inv)
+
+to convert ev to K:
+IDL> x = eV
+IDL> y = ERG(ERG(x,/ev),/degk,/inv)
+
+to convert knots to miles/hr
+IDL> x = knot
+IDL> y = CM(CM(x,/nmil,/inv),/mile)

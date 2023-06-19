@@ -1,0 +1,29 @@
+                                                             November 2001
+                                                              
+/landsman - Contains separate utilities in the /help, /v5  and /mousse 
+            directories
+
+   /help  Contains the procedure MAN.PRO and supporting procedures
+           MAN.PRO will emulate the old IDL online help facility available
+           prior to IDL version 4.0.   For example,
+
+    IDL> man,'rebin      ;Display help on intrinisic IDL REBIN function
+    IDL> man,'hrebin     ;Display help on Astronomy Library HREBIN procedure
+    IDL> man,'astron     ;Display all astronomy library procedures
+
+   1-Apr-96: Updated to work even if a ROUTINES.HELP file is not present
+   19-Jul-96: Updated under VMS to work under VMS text libraries
+
+
+    /mousse This is an old (1995) package designed for analyzing data from the
+           Ultraviolet Imaging Telescope (UIT).     The full MOUSSE package is 
+           available from http://archive.stsci.edu/uit/analysis.html.    The
+           procedures here include only the subset of non-instrument specific
+           software.
+ 
+   
+   /v5    Contains the procedure idlv4_to_v5 and associated procedures to
+    change subscripts in a procedure from parentheses to square brackets for
+    compatibility with IDL V5.0.    Also contains the reverse procedure
+    idlv5_to_v4 to remove square brackets from an IDL V5.0 procedure, so that
+    it runs under V4.0

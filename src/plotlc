@@ -1,0 +1,558 @@
+#! /usr/bin/perl
+
+use warnings;
+use strict;
+
+my $version = '0.1';
+
+use FindBin;
+use Config;
+use Carp;
+use PDL;
+use PGPLOT;
+use PDL::Graphics::PGPLOT;
+use PDL::Graphics::LUT;
+use MyRDB;
+use Carp;
+use Getopt::Long;
+use Chandra::Tools::Common qw/ asc2jd /;
+use Astro qw( ymd2jd );
+
+use FindBin qw/ $RealBin /;
+use lib $RealBin;
+use ARLac;
+
+use Getopt::Long;
+my %default_opts = (
+		    'dev' => '/xs',
+		    tcolor => 1, # time coloring
+		    wedge => 1,
+		    title => '',
+		    cmap => 'pastel', # time colormap
+		    flux => 0,
+		    lw => 3,
+		    ch => 1.1,
+		    mfile => '/data/legs/rpete/flight/ARLac/counts/lc_models/arlac_xlc_constb2.5.dat',
+		    #mfile => '/data/legs/rpete/flight/ARLac/lc_models/arlac_xlc_const.dat',
+		    model => '05',
+		    pmodel => 1,
+		    bad => 0,
+		    flare => 1,
+		    zerofluxerr => 0,
+		   );
+my %opts = %default_opts;
+GetOptions(\%opts,
+	   'help!', 'version!', 'debug!',
+	   'dev=s',
+	   'tcolor!', 'cmap=s', 'wedge!',
+	   'lw=i', 'ch=f', 'title=s',
+	   'mfile=s', 'pmodel!', 'model=s', 'flare!',
+	   'iter!', 'zerofluxerr!', 'bad!',
+	   'rodono!', 'lu!', 'siviero1!', 'siviero3!', 'norm=f',
+	   'rate!',
+	  ) or die "Try --help for more information.\n";
+if ($opts{debug}) {
+  $SIG{__WARN__} = \&Carp::cluck;
+  $SIG{__DIE__} = \&Carp::confess;
+}
+$opts{help} and _help();
+$opts{version} and _version();
+
+my $phasesub = \&ARLac::phase;
+
+if ($opts{rodono}) {
+  $phasesub = \&ARLac::phase_rodono;
+}
+elsif ($opts{lu}) {
+  $phasesub = \&ARLac::phase_lu;
+}
+elsif ($opts{siviero1}) {
+  $phasesub = \&ARLac::phase_siviero1;
+}
+elsif ($opts{siviero3}) {
+  $phasesub = \&ARLac::phase_siviero3;
+}
+
+@ARGV or die "Usage: $0 [option] rdb1 rdb2 ...\n";
+my @rdb = @ARGV;
+
+my ($o, $phase, $rjd, $time, $flux, $fluxerr) = (pdl []) x 6;
+
+my $id;
+
+my @cols = qw/ obsid phase rjd tmid exposure /;
+if ($opts{rate}) {
+  push @cols, qw/ netcnt netcnterr /;
+}
+else {
+  push @cols, qw/ flux fluxerr /;
+}
+
+for my $rdb (@rdb) {
+
+  my @rdb_header = grep /^# flux\s/, MyRDB::rdb_header($rdb) or die;
+  my ($this_id) = $rdb_header[0] =~ /(erg|ph)/ or die;
+  $id = $this_id unless defined $id;
+
+  die "$this_id $id" unless $this_id eq $id;
+
+  #my ($o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, qw/ obsid phase rjd tmid exposure flux fluxerr /) or die;
+  my ($o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, @cols) or die;
+
+  $_ = pdl $_ for $o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1;
+
+  $o = $o->append($o1);
+  $phase = $phase->append($phase1);
+  $rjd = $rjd->append($rjd1);
+  $time = $time->append($time1);
+  if ($opts{rate}) {
+    $flux = $flux->append($flux1 / $exptime);
+    $fluxerr = $fluxerr->append($fluxerr1 / $exptime);
+  }
+  else {
+    $flux = $flux->append($flux1);
+    $fluxerr = $fluxerr->append($fluxerr1);
+  }
+}
+
+my $tmp;
+
+# recalculate phases, from Ye Lu, et al 2012
+$phase = $phasesub->( $rjd + 2400000 );
+
+$phase -= $phase->long;
+my $negind = which($phase < 0);
+($tmp = $phase->index($negind)) += 1;
+
+if (!$opts{zerofluxerr}) {
+
+  my $ind = which($fluxerr != 0);
+  warn sprintf("removing %d / %d \"zerofluxerr\" data points\n", $fluxerr->nelem- $ind->nelem, $fluxerr->nelem);
+  $_ = $_->index($ind) for $o, $phase, $flux, $fluxerr, $time;
+
+}
+
+if (!$opts{bad}) {
+  my ($goodi, $badi) = ARLac::are_bad($o);
+  warn sprintf("removing %d / %d \"bad\" data points\n", $badi->nelem, $o->nelem);
+  $_ = $_->index($goodi) for $o, $phase, $flux, $fluxerr, $time;
+}
+
+if (!$opts{flare}) {
+  my ($goodi, $badi) = ARLac::are_flare($o);
+  warn sprintf("removing %d / %d \"flare\" data points\n", $badi->nelem, $o->nelem);
+  $_ = $_->index($goodi) for $o, $phase, $flux, $fluxerr, $time;
+}
+
+my $dup_index;
+
+$dup_index = which($phase < 0.2);
+if ($dup_index->nelem) {
+  $phase = $phase->append($phase->index($dup_index)+1.0);
+  $_ = $_->append($_->index($dup_index)) for $o, $flux, $fluxerr, $time;
+}
+
+$dup_index = which(($phase > 0.8) & ($phase < 1.0));
+if ($dup_index->nelem) {
+  $phase = $phase->append($phase->index($dup_index)-1.0);
+  $_ = $_->append($_->index($dup_index)) for $o, $flux, $fluxerr, $time;
+}
+
+my $ind = $time->qsorti;
+$_ = $_->index($ind) for $o, $phase, $time, $flux, $fluxerr;
+
+my $gap = 1e6;
+
+my $gap_start_i = which($time->slice('1:-1') - $time->slice('0:-2')> $gap);
+my $starti = zeroes(long, $gap_start_i->nelem+1);
+my $stopi = $starti->copy;
+
+($tmp = $starti->slice('1:-1')) .= $gap_start_i + 1;
+($tmp = $stopi->slice('0:-2')) .= $gap_start_i;
+$stopi->set(-1, $phase->nelem-1);
+
+# wcols $starti, $stopi;
+# print "\n";
+
+pgopen($opts{dev}) > 0 or die "could not open $opts{dev}";
+
+pgscr(0,1,1,1);
+pgscr(1,0,0,0);
+
+pgslw($opts{lw});
+pgsch($opts{ch});
+pgscf(1);
+
+pgsvp(0.2, 0.9, 0.1, 0.9);
+my ($y1, $y2) = $flux->minmax;
+pgswin(-0.2, 1.2, 0, $flux->max * 1.1);
+pgbox('BCNST', 0, 0, 'BCNT', 0, 0);
+
+#pgenv(-.2,1.2,0,$flux->max+($flux->max-$flux->min)*0.1,0,0);
+pgsave();
+
+my $jd = asc2jd($time);
+my $jdmin = ymd2jd(1999,8,20);
+$jdmin = ymd2jd(1999,7,15);
+my $jdmax = $jd->max+.001;# + 180;
+
+if ($opts{tcolor}) {
+  set_ctab($opts{cmap});
+  my $jdref = ymd2jd(1999,1,1);
+  my ($y1, $y2) = (1999 + ($jdmin - $jdref) / 365.2425, 1999 + ($jdmax - $jdref) / 365.2425);
+  pgwedg('LI', 4, 3, $y1, $y2, '') if $opts{wedge};
+}
+
+
+if ($opts{iter}) {
+
+  for my $i (0..$starti->nelem-1) {
+    my $starti = $starti->at($i);
+    my $stopi = $stopi->at($i);
+    my $ind = $starti==$stopi ? ones(long, 1) + $starti : sequence($stopi-$starti)+1+$starti;
+
+    my ($t1, $t2) = rle($o->index($ind));
+    my $ouniq = $t2->where($t1);
+    wcols $ouniq;
+
+    draw_points($phase->index($ind),
+		$flux->index($ind),
+		$fluxerr->index($ind),
+		$jd->index($ind),
+		$jdmin,
+		$jdmax
+	       );
+    <STDIN>;
+  }
+}
+else {
+  draw_points($phase, $flux, $fluxerr, $jd, $jdmin, $jdmax);
+}
+
+pgunsa();
+my $xlabel = 'phase';
+my $ylabel = $id . ' cm\u-2\d s\u-1\d';
+my $title = $opts{title};
+
+if ($opts{rate}) {
+  $ylabel = 'Event rate (s\u-1\d)';
+}
+
+pglab($xlabel, $ylabel, $title);
+
+if ($opts{pmodel}) {
+  plot_model($flux, $phase);
+}
+
+pgend();
+
+exit 0;
+
+
+sub draw_points {
+
+  my ($phase, $flux, $fluxerr, $jd, $jdmin, $jdmax) = @_;
+
+  if ($opts{tcolor}) {
+
+    my $ci = xform_ci($jd, $opts{cmap}, $jdmin, $jdmax);
+    for my $i (0..$phase->nelem-1) {
+      pgsci($ci->at($i));
+      pgpt(1, $phase->at($i), $flux->at($i), 17);
+      pgerry(1,
+	     $phase->at($i),
+	     ($flux - $fluxerr)->at($i),
+	     ($flux + $fluxerr)->at($i),
+	     0);
+    }
+
+    my ($y1, $y2);
+    $y1 = 1999.6;
+    $y2 = ($jdmax - $jdmin) / 365.24 + 1999.6;
+  } else {
+    pgpt($phase->nelem,
+	 $phase->float->get_dataref,
+	 $flux->float->get_dataref,
+	 17
+	);
+    pgerry($phase->nelem,
+	   $phase->float->get_dataref,
+	   ($flux - $fluxerr)->float->get_dataref,
+	   ($flux + $fluxerr)->float->get_dataref,
+	   0
+	  );
+  }
+
+}
+
+
+sub xform_ci {
+
+  my ($xx, $name, $min, $max) = @_;
+
+  defined $min or $min = $xx->min;
+  defined $max or $max = $xx->max;
+
+  # transform to [0, 1)
+  my $x = ($xx - $min) / ($max - $min);
+
+  # get current color index range
+  my ($c1, $c2);
+  pgqcir($c1, $c2);
+
+  return long($x * ($c2-$c1+1) + $c1);
+}
+
+sub set_ctab {
+  my $name = shift;
+  my ($l, $r, $g, $b) = lut_data($name);
+  pgctab(
+	 $l->float->get_dataref,
+	 $r->float->get_dataref,
+	 $g->float->get_dataref,
+	 $b->float->get_dataref,
+	 $l->nelem,
+	 1, 0.5);
+#  pgscir(17,255);
+}
+
+sub read_models_old {
+  my $f = shift;
+  my $n = 102;
+
+  open FH, '< '.$f or die "could not open $f: $!";
+  # phases first
+  my $phase = zeroes(float, $n);
+  sysread(FH, ${ $phase->get_dataref }, $n * 4) == $n * 4 or die;
+  $phase->upd_data;
+  $phase->bswap4 if isbigendian();
+
+  # they are off by 0.5
+  $phase += 0.5;
+  $phase->where($phase>1) -= 1.0;
+  my $si = $phase->qsorti;
+
+  # models are lc_{01,02,05,10,15,20,40}
+  my @p = qw( 01 02 05 10 15 20 40 );
+
+  my %lc;
+  for my $p (@p) {
+    $lc{$p} = zeroes(float, $n);
+    sysread(FH, ${ $lc{$p}->get_dataref }, $n * 4) == $n * 4 or die;
+    $lc{$p}->upd_data;
+    $lc{$p}->bswap4 if isbigendian();
+  }
+
+  $_ = $_->index($si) for $phase, values %lc;
+
+  return $phase, %lc;
+
+}
+
+sub plot_model_old {
+
+  my ($flux, $phase) = @_;
+
+  my $i = which(($phase > 0.1) &  ($phase < 0.9));
+  $_ = $_->index($i) for $flux, $phase;
+
+  my ($ph, %lc) = read_models_old($opts{mfile}) or die;
+
+  exists $lc{$opts{model}} or die "no model named '$opts{model}'";
+
+  my ($fluxavg, $fluxsd) = ($flux->stats)[0,1];
+
+#  my $i = which(abs($flux-$fluxavg) < 3*$fluxsd);
+  my $norm = $flux->median;
+
+  $norm = $opts{norm} if exists $opts{norm};
+
+  print "model normalization = $norm\n";
+
+  $_ *= $norm for values %lc;
+
+  $i = which($ph < 0.5);
+  if ($i->nelem) {
+    $ph = $ph->append($ph->index($i)+1.0);
+    $_ = $_->append($_->index($i)) for values %lc;
+  }
+
+  $i = which(($ph > 0.5) &  ($ph < 1.0));
+  if ($i->nelem) {
+    $ph = $ph->append($ph->index($i)-1.0);
+    $_ = $_->append($_->index($i)) for values %lc;
+  }
+
+  $i = $ph->qsorti;
+  $_ = $_->index($i) for $ph, values %lc;
+
+  pgline($ph->nelem,
+	 $ph->float->get_dataref,
+	 $lc{$opts{model}}->float->get_dataref
+	);
+
+  # FIXME
+  my @m = qw( 02 10 );
+  my @ls = ( 2, 3 );
+  for my $i (0..$#m) {
+    my $m = $m[$i];
+    my $ls = $ls[$i];
+
+    pgsave();
+    pgsls($ls);
+    pgline($ph->nelem,
+	   $ph->float->get_dataref,
+	   $lc{$m}->float->get_dataref
+	  );
+    pgunsa();
+  }
+
+}
+
+sub plot_model {
+
+  my ($flux, $phase) = @_;
+
+  my $i = which(($phase > 0.1) &  ($phase < 0.9));
+  $_ = $_->index($i) for $flux, $phase;
+
+#  my ($ph, $best, @others) = model_bands();
+  my ($ph, $best, @others) = ARLac::models();
+
+  my ($fluxavg, $fluxsd) = ($flux->stats)[0,1];
+#  my $i = which(abs($flux-$fluxavg) < 3*$fluxsd);
+  my $norm = $flux->median;
+
+  $norm = $opts{norm} if exists $opts{norm};
+
+  print "model normalization = $norm\n";
+
+  $_ *= $norm for $best, @others;
+
+  $i = which($ph < 0.5);
+  if ($i->nelem) {
+    $ph = $ph->append($ph->index($i)+1.0);
+    $_ = $_->append($_->index($i)) for $best, @others;
+  }
+
+  $i = which(($ph > 0.5) &  ($ph < 1.0));
+  if ($i->nelem) {
+    $ph = $ph->append($ph->index($i)-1.0);
+    $_ = $_->append($_->index($i)) for $best, @others;
+  }
+
+  $i = $ph->qsorti;
+  $_ = $_->index($i) for $ph, $best, @others;
+
+  pgline($ph->nelem,
+	 $ph->float->get_dataref,
+	 $best->float->get_dataref
+	);
+
+  pgsave();
+  pgsls(2);
+  pgline($ph->nelem,
+	 $ph->float->get_dataref,
+	 $_->float->get_dataref
+	) for @others;
+  pgunsa();
+}
+
+sub model_bands {
+  my $mdir = '/data/legs/rpete/flight/ARLac/models';
+
+  my @f = glob "$mdir/*.rdb" or die;
+
+  my ($phase, $intensity_) = MyRDB::rdb_cols($f[0], qw/ phase intensity /);
+  $_ = pdl $_ for $phase, $intensity_;
+
+  my $intensity = zeroes(scalar(@f), $intensity_->nelem);
+
+  my $best_fit;
+
+  for my $j (0..$#f) {
+    my ($p, $i) = MyRDB::rdb_cols($f[$j], qw/ phase intensity /);
+    $_ = pdl $_ for $p, $i;
+
+    which($p != $phase)->nelem and die $f[$j];
+
+    (my $tmp = $intensity->slice("($j)")) .= $i;
+
+    $best_fit = $i->copy if $f[$j] =~ /\Q0.15_1.70_0.38\E/;
+  }
+
+  defined $best_fit or die;
+
+  return $phase, $best_fit, $intensity->minimum, $intensity->maximum;
+}
+
+sub _help {
+  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
+}
+
+sub _version {
+  print $version,"\n";
+  exit 0;
+}
+
+=head1 NAME
+
+template - A template for Perl programs.
+
+=head1 SYNOPSIS
+
+cp template newprog
+
+=head1 DESCRIPTION
+
+blah blah blah
+
+=head1 OPTIONS
+
+=over 4
+
+=item --help
+
+Show help and exit.
+
+=item --version
+
+Show version and exit.
+
+=back
+
+=head1 AUTHOR
+
+Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> May 2012
+
+=head1 SEE ALSO
+
+perl(1).
+
+=cut
+
+
+__DATA__
+sub help {
+  print <<EOP;
+Usage: $0 [options]
+
+    --help     show help and exit
+    --obsids=s   code to eval for getting obsids
+    --notcolor color points on vignette correction instead of time of obs
+    --cmap=s which colormap to use for time coloring
+    --nowedge  do not plot a wedge annotation for time colors
+    --hrci     use HRC-I obsids
+    --hrcs     use HRC-S obsids
+    --dev=s    PGPLOT device to use for final plot
+    --flux     plot fluxes instead of manually-corrected rates
+    --noqetcorr do not correct HRC-S rates by 1% per year since 2000
+    --spectrum=s spectral model filename
+    --mfile=s    path to model file (lc_models/arlac_xlc_constb2.5.dat)
+    --model=s    which model to plot (default is "05")
+    --nopmodel    do not plot the light curve model
+
+EOP
+  exit 0;
+}
+

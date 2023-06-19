@@ -1,0 +1,8 @@
+../sginr.so \
+		:st = .text 0x5ffe0000, 0x00010000:\
+		:st = .data 0x5fff0000, 0x00010000:\
+
+-p \
+		:st = .text 0x5ffc0000, 0x00010000:\
+		:st = .data 0x5ffd0000, 0x00010000:\
+

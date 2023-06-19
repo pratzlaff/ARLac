@@ -1,0 +1,10 @@
+so='solarisnr.so'
+x=findgen(10) & y=2+5*x & sig=abs(randomn(seed,10)*0.1)
+iarg=[10L,1L] & rarg=[x,y,sig,fltarr(6)] & darg=0.D   
+i=call_external(so,'solarismain','fit',iarg,rarg,darg) & print,rarg(30:*)
+
+so='solarisnr.so'
+x=findgen(10) & y=2+5*x
+sigx=abs(randomn(seed,10)*0.1) & sigy=abs(randomn(seed,10)*0.2)
+iarg=10L & rarg=[x,y,sigx,sigy,fltarr(6)] & darg=10.D
+i=call_external(so,'solarismain','fitexy',iarg,rarg,darg)

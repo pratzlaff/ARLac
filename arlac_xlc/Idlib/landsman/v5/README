@@ -1,0 +1,62 @@
+                                                                5-Aug-1998
+                                                                
+This directory contains the procedure idlv4_to_v5.pro for converting an IDL
+V4.0 (or earlier) procedure file to use the IDL V5.0 convention of square 
+brackets for array subscripts, and the procedure idl5to4.pro to convert V5
+procedures to run under V4.0.
+
+IDLV4_TO_V5 has the following restrictions:
+
+(1) Only runs under IDL V5.0 and later (since it calls ROUTINE_INFO())
+(2) May possibly get confused by parentheses within strings.
+(3) May get confused by IDL statements that extend over multiple lines
+    idlv4_to_v5 will supply a warning when it becomes confused by
+    unmatched parenthesis.
+(4) Do not include this procedure 'idlv4_to_v5' in the directory that 
+    you are trying to convert (since it will compile the procedure 
+    while executing it, and do a retall.)
+(5) Conversions cannot be performed unless specified procedure(s) 
+    already compile properly
+(6) Will not work on IDL main programs
+(7) May get confused by gaps between array name and parenthesis
+
+IDLV4_TO_V5 requires the following supporting procedures:
+
+ISFUNCTION() - Determine whether the IDL program(s) in a file are procedures
+		or functions.
+FDECOMP - Decompose a file (from IDL Astro Library)
+REMOVE - Remove specified elements from specified vectors (from IDL Astro Lib)
+GETTOK() - Retrieve first part of a string up to a character token (from IAL)
+MATCH - Find matching elements in two arrays (from IAL)
+
+
+**************************************************************
+
+Also available is the procedure idl5to4.pro to remove all square subscripts
+in a V5.0 procedure, so that it can run under V4.0.    This procedure was
+written by William Thompson at Goddard Space Flight Center.     This procedure
+runs under V4.0, and does not have many of the other restrictions of
+IDLV5_TO_V4.    IDL5TO4.PRO requires the following supporting procedures:  
+
+BREAK_FILE, CONCAT_DIR, DATA_CHK, DATATYPE, FILE_EXIST, FIND_ALL_DIR,
+FIND_FILE, FIND_FILES OS_FAMILY(), TAG_EXIST
+
+***Note that several of these supporting procedures (e.g. FILE_EXIST, FIND_FILE)
+do not exist in the IDL Astronomy Library and must be copied from either this
+directory or from the Solar Library at
+(http://sohowww.nascom.nasa.gov/solarsoft/gen/idl/).***
+
+
+June 2001:    Include FIND_ALL_DIR procedure
+
+August 1998:  Replace idlv5_to_v4 with idl5to4, which is a much less restrictive
+              conversion procedure written by William Thompson.
+
+September 1997: Updated idlv4_to_v5 to recognize that variable names can 
+                include numerals.     Use V5.0 versions of FDECOMP, REMOVE, 
+		and GETTOK
+
+October 1997:   Never put square brackets after an intrinsic IDL function name,
+                even if it is also a variable name.
+
+February 1997:  Added idlv5_to_v4

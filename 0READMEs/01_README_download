@@ -1,0 +1,23 @@
+#! /bin/bash
+
+#
+# download data
+#
+
+. ~/.bash_aliases
+shopt -s expand_aliases
+
+ciao -o
+
+. src/functions.bash
+
+# list of obsids
+obsids=$($perl -I./src -MARLac -le 'print join " ", ARLac::obsids()')
+obsids=$(perl -le 'print join " ", (24546..24566)')
+
+mkdir -p $datadir
+cd $datadir
+for o in $obsids
+do
+  download_chandra_obsid $o evt1,bpix,asol,msk,flt,dtf 2>&1
+done

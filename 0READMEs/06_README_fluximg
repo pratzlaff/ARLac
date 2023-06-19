@@ -1,0 +1,138 @@
+#! /bin/bash
+
+<<'COMMENT'
+perl=/proj/axaf/bin/perl
+[[ `hostname` = @(milagro|legs) ]] && perl=perl
+. /data/legs/rpete/flight/analysis_functions/util.bash
+obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::hrci_obsids()")
+obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids()")
+obsids=$($perl -le 'print join " ", (24546..24566)')
+obsids=25592
+screen -dmS arlac bash -c 'exec bash'
+n=12
+for i in {1..12}
+do
+  o=$(i_of_n $i $n $obsids)
+  screen -S arlac -X screen bash -c "time /bin/bash 0READMEs/06_README_fluximg $o; exec bash"
+done
+screen -rS arlac
+COMMENT
+
+# # something like,
+# # screen -dmS arlac bash -c 'exec bash'
+# # for i in {1..6}; do screen -xS arlac -X screen bash -c "/bin/bash 0READMEs/03_README_fluximg $i 6; exec bash"; done
+# 
+# i=$1
+# n=$2
+# #obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids($i,$n)")
+# obsids=$($perl -le 'print join " ", (24644,22751..22771,24525..24545)')
+# obsids=$($perl -I./src -MARLac=split_array -e "\$i=$i; \$n=$n; "'@obsids=(24644,22751..22771,24525..24545); print join " ", @{(split_array($n, @obsids))[$i-1]};')
+# 
+# echo $obsids
+# exit
+
+obsids="$@"
+
+. ~/.bash_aliases
+shopt -s expand_aliases
+
+ciao -o
+
+perl=/proj/axaf/bin/perl
+[[ `hostname` = @(milagro|legs) ]] && perl=perl
+
+base=/data/legs/rpete/data/ARLac
+
+. /data/legs/rpete/flight/analysis_functions/tmppdir.bash
+. /data/legs/rpete/flight/analysis_functions/caldb_files.bash
+
+punlearn ardlib
+
+i_qe=13
+i_qe_dir=/data/legs/rpete/flight/hrci_qe/N00${i_qe}/qe
+
+s_qe=16
+s_qe_dir=/data/legs/rpete/flight/hrcs_qe/N00${s_qe}/qe
+
+s_qeu=15
+s_qeu_dir=/data/legs/rpete/flight/hrcs_qeu/ARD/v${s_qeu}/qeu
+
+# Don't do this until all instrument maps are ready to be recreated
+mkdir -p ./spectrum
+# sherpa -b src/mkspectrum.py
+
+for o in $obsids
+do
+    evt2=$(ls "$base/$o/tg_reprocess"/*_evt2.fits)
+    detnam=$(dmkeypar "$evt2" detnam echo+)
+
+    echo $detnam | grep -qi hrc-i && {
+        i_qe_file=$(match_caldb_file "$evt2" qe "${i_qe_dir}" "N00${i_qe}")
+        pset ardlib AXAF_HRC-I_QE_FILE="$i_qe_file"
+    }
+
+    echo $detnam | grep -qi hrc-s && {
+        s_qe_file=$(match_caldb_file "$evt2" qe "${s_qe_dir}" "N00${s_qe}")
+        pset ardlib AXAF_HRC-S1_QE_FILE="$s_qe_file"'[AXAF_QE1]'
+        pset ardlib AXAF_HRC-S2_QE_FILE="$s_qe_file"'[AXAF_QE2]'
+        pset ardlib AXAF_HRC-S3_QE_FILE="$s_qe_file"'[AXAF_QE3]'
+
+        s_qeu_file=$(match_caldb_file "$evt2" qeu "$s_qeu_dir" "N00${s_qeu}")
+        pset ardlib AXAF_HRC-S1_QEU_FILE="$s_qeu_file"'[AXAF_QEU1]'
+        pset ardlib AXAF_HRC-S2_QEU_FILE="$s_qeu_file"'[AXAF_QEU2]'
+        pset ardlib AXAF_HRC-S3_QEU_FILE="$s_qeu_file"'[AXAF_QEU3]'
+    }
+
+    indir=$base/$o
+    rm -f "$indir"/cell_output.fits
+
+    for id in ph erg
+    do
+	spectrumfile=/data/legs/rpete/flight/ARLac/spectrum/spectrum_${id}.txt
+
+	outdir=$indir/flux_full
+	mkdir -p $outdir
+	$perl ./src/mkflux $indir \
+	    --id=$id --spectrumfile=$spectrumfile \
+	    --postfix 0 --outdir $outdir \
+	    2>&1 | tee $outdir/flux_${id}_0.log
+
+#	for t in 100 400
+	for t in 400
+	do
+	    outdir=$indir/flux_$t
+	    mkdir -p $outdir
+	    $perl ./src/mkflux_binned $indir $t \
+		--outdir=$outdir \
+		-- \
+		--id=$id --spectrumfile=$spectrumfile \
+		2>&1 | tee $outdir/flux_${id}.log
+	done
+    done
+done
+
+#
+# find obsids potentially affected by the HESF
+#
+false && {
+  for o in $obsids
+  do
+    dmstat /data/legs/rpete/data/ARLac/$o/tg_reprocess/*evt2_dtffilt.fits'[sky=region(/data/legs/rpete/data/ARLac/'$o'/flux_full/src.reg)][col chip]' verbose=0
+    xmin=`pget dmstat out_min | cut -f1 -d,`
+    ymax=`pget dmstat out_max | cut -f2 -d,`
+    [ $xmin -lt 1050 -a $ymax -gt 13000 ] && echo $o: $xmin $ymax
+  done
+}
+
+# view counts images
+false && {
+    for o in $obsids
+    do
+        echo $o
+        dir=/data/legs/rpete/data/ARLac/$o/flux_full
+        ds9 -cmap Heat -zoom to fit -scale log -scale mode 99.5 \
+            $dir/img_clean0.fits \
+            -regions $dir/src.reg \
+            -regions $dir/bg.reg
+    done
+}

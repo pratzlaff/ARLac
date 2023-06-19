@@ -1,0 +1,55 @@
+;rfunct='exp'
+rfunct='const'
+b1=1.0 & b2=0.5 & visual=2
+cc=89.99
+
+h1=0.1 & h2=h1
+.run mk_xray_lc
+lc_01=lc & tgrid_01=tgrid
+
+h1=0.2 & h2=h1
+.run mk_xray_lc
+lc_02=lc & tgrid_02=tgrid
+
+h1=0.5 & h2=h1
+.run mk_xray_lc
+lc_05=lc & tgrid_05=tgrid
+
+h1=1.0 & h2=h1
+.run mk_xray_lc
+lc_10=lc & tgrid_10=tgrid
+
+h1=1.5 & h2=h1
+.run mk_xray_lc
+lc_15=lc & tgrid_15=tgrid
+
+h1=2.0 & h2=h1
+.run mk_xray_lc
+lc_20=lc & tgrid_20=tgrid
+
+h1=4.0 & h2=h1
+.run mk_xray_lc
+lc_40=lc & tgrid_40=tgrid
+
+save,file='arlac_xlc.sav',lc_01,tgrid_01,lc_02,tgrid_02,lc_05,tgrid_05,$
+	lc_10,tgrid_10,lc_15,tgrid_15,lc_20,tgrid_20,lc_40,tgrid_40,$
+	b1,b2,rfunct
+
+set_plot,'ps' & device,file='mk_xray_lc.ps'
+plot,[tgrid_01,1+tgrid_01],[lc_01,lc_01],$
+	xtitle='phase',title='emission scale-height=0.1'
+plot,[tgrid_02,1+tgrid_02],[lc_02,lc_02],$
+	xtitle='phase',title='emission scale-height=0.2'
+plot,[tgrid_05,1+tgrid_05],[lc_05,lc_05],$
+	xtitle='phase',title='emission scale-height=0.5'
+plot,[tgrid_10,1+tgrid_10],[lc_10,lc_10],$
+	xtitle='phase',title='emission scale-height=1.0'
+plot,[tgrid_15,1+tgrid_15],[lc_15,lc_15],$
+	xtitle='phase',title='emission scale-height=1.5'
+plot,[tgrid_20,1+tgrid_20],[lc_20,lc_20],$
+	xtitle='phase',title='emission scale-height=2.0'
+plot,[tgrid_40,1+tgrid_40],[lc_40,lc_40],$
+	xtitle='phase',title='emission scale-height=4.0'
+device,/close
+
+set_plot,'x'

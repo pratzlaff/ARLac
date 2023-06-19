@@ -1,0 +1,334 @@
+#! /usr/bin/perl -w
+use strict;
+
+#use Config;
+#use lib '/home/rpete/local/perlmods';
+#use lib '/home/rpete/local/perlmods/'.$Config{archname};
+
+use FindBin qw/ $RealBin /;
+use lib $RealBin;
+use ARLac;
+
+use Astro::FITS::CFITSIO;
+use PDL;
+use Astro::WCS::LibWCS;
+use Chandra::Tools::Common;
+use MyRDB;
+
+my $datadir = '/data/legs/rpete/data/ARLac';
+
+use Getopt::Long;
+my %default_opts = (
+		    hrci => 1,
+		    hrcs => 1,
+		    sort => 1,
+		   );
+my %opts = %default_opts;
+GetOptions( \%opts,
+	   'hrci!', 'hrcs!', 'latex!', 'sort!',
+	   ) or die;
+@ARGV and die;
+
+if (!($opts{hrci} or $opts{hrcs})) {
+  $opts{hrci} = $opts{hrcs} = 1;
+}
+
+my @olist_hrci = (
+		  [1283..1289, 1294..1295,
+		   { obsid_string => '1283-1289, 1294-1295' }
+		  ],
+		  [1319..1382, 1385,
+		   { obsid_string => '1319-1382, 1385' }
+		  ],
+		  [1484..1504],
+		  [996, 2345..2364,
+		   { obsid_string => '996, 2345-2364' }
+		  ],
+		  [2604..2624],
+		  [4290..4310],
+		  [5060..5062],
+		  [5063..5080, 6133..6135,
+		   { obsid_string => '5063-5080, 6133-6135' }
+		  ],
+		  [5979..5989],
+		  [5996, 5997],
+		  [5990, 5992],
+		  [5993..5995, 5998..5999,
+		   { obsid_string => '5993-5995, 5998-5999' }
+		  ],
+		  [6519..6539],
+		  [8298..8318],
+		  [9684..9685],
+		  [9640..9660],
+		  [10578..10598],
+		  [11889..11909],
+		  [13182],
+		  [13265, 13048..13067,
+		   { obsid_string => '13265, 13048-13067' }
+		  ],
+		  [14299..14319],
+		  [15409..15429],
+		  [16376..16396],
+		  [17351..17371],
+		  [18408],
+		  [18387..18407],
+		  [19836],
+		  [19815..19835],
+		  [20684],
+		  [20663..20683],
+		  [21783],
+		  [21762..21782],
+		  [21742..21761],
+		  [22854],
+		  [22772..22792],
+		  [22751..22771],
+		  [24525..24545],
+
+		 );
+
+my @olist_hrcs = (
+		  [998, 2366..2385,
+		   { obsid_string => '998, 2366-2385' }
+		  ],
+		  [997, 2432..2451,
+		   { obsid_string => '997, 2432-2451' }
+		  ],
+		  [2625..2645],
+		  [2646..2666],
+		  [4332..4352],
+		  [4311..4331],
+		  [5081..5101],
+		  [5102..5122],
+		  [6021..6041],
+		  [6000..6020],
+		  [6477..6497],
+		  [6498..6518],
+		  [8320..8340],
+		  [9682..9683],
+		  [9661..9681],
+		  [10601..10621],
+		  [11910..11930],
+		  [13068..13088],
+		  [14278..14298],
+		  [15430..15450],
+		  [16397..16417],
+		  [17330..17350],
+		  [17330..17350],
+		  [18366..18386],
+		  [19794..19814],
+		  [20685..20705],
+		  [21741],
+		  [22793..22799],
+		 );
+
+
+my @olist;
+my @det;
+
+if ($opts{hrci}) {
+  push @olist, @olist_hrci;
+  push @det, ('I') x @olist;
+}
+
+if ($opts{hrcs}) {
+  push @olist, @olist_hrcs;
+  push @det, ('S') x @olist;
+}
+
+my @cols = qw(obsids
+              det
+              first_tstart
+	      last_tstop
+	      elapsed
+	      exptime
+	      );
+
+if ($opts{latex}) {
+
+  my $example_latex = <<'EOE';
+\begin{deluxetable}{llllll}
+\label{t:hrcobs}
+\tablecaption{Chandra HRC Observations of AR~Lac used in this Analysis}
+\tablehead{
+\colhead{Observation} &
+\colhead{Detector} &
+\colhead{UT First Start} &
+\colhead{UT Last Stop} &
+\colhead{Elapsed Time} &
+\colhead{Total Exposure} \\
+\colhead{ID} &
+\colhead{} &
+\colhead{} &
+\colhead{} &
+\colhead{(ks)} &
+\colhead{(ks)}
+}
+%\colhead{Notes} \\
+
+
+\startdata
+
+1385-1385 & HRC-I & 1999-10-05T00:16:23 & 1999-10-05T05:46:33 & 20 & 19 \\
+1283-1289, 1294-1295 & HRC-I & 1999-08-31T19:31:51 & 1999-09-01T00:41:32 & 19 & 3 \\
+1319-1382 & HRC-I & 1999-10-03T13:10:26 & 1999-10-04T23:08:34 & 122 & 48 \\
+1484-1504 & HRC-I & 1999-12-09T09:41:42 & 1999-12-09T20:40:04 & 40 & 13 \\
+996-996 & HRC-I & 2000-12-12T16:31:38 & 2000-12-12T17:07:24 & 2 & 0 \\
+2345-2364 & HRC-I & 2000-12-12T17:07:24 & 2000-12-13T01:37:11 & 31 & 12 \\
+2604-2623 & HRC-I & 2002-01-26T23:03:17 & 2002-01-27T07:27:13 & 30 & 12 \\
+4290-4310 & HRC-I & 2003-02-22T09:26:05 & 2003-02-22T18:23:36
+& 32 & 12 \\ \hline
+2366-2381, 2383-2385 & HRC-S & 2000-12-20T15:22:45 & 2000-12-20T23:51:27 & 31 & 11 \\
+998-998 & HRC-S & 2000-12-20T14:52:41 & 2000-12-20T15:22:45 & 2 & 0 \\
+2432-2451 & HRC-S & 2001-05-14T00:38:10 & 2001-05-14T10:30:09 & 36 & 17 \\
+997-997 & HRC-S & 2001-05-14T00:05:25 & 2001-05-14T00:38:10 & 2 & 1 \\
+2625-2635, 2637-2645 & HRC-S & 2002-01-26T14:09:49 & 2002-01-26T23:03:17 & 32 & 12 \\
+2646-2666 & HRC-S & 2002-08-09T11:30:11 & 2002-08-10T12:52:59 & 91 & 26 \\
+4332-4342, 4344-4352 & HRC-S & 2003-02-22T00:26:08 & 2003-02-22T09:26:05 & 32 & 11 \\
+4311-4314, 4316-4331 & HRC-S & 2003-09-01T09:42:51 & 2003-09-01T18:59:46 & 33 & 11 \\
+
+%\multicolumn{6}{l}{U\ Treated as an upper limit} \\
+%\multicolumn{6}{l}{4.\ Possible blend Fe XVIII 16.023} \\
+\enddata
+\end{deluxetable}
+EOE
+
+
+  print <<'EOP';
+\begin{deluxetable}{llllll}
+\label{t:hrcobs}
+\tablecaption{Chandra HRC Observations of AR~Lac used in this Analysis}
+\tablehead{
+\colhead{Observation} &
+\colhead{Detector} &
+\colhead{UT First Start} &
+\colhead{UT Last Stop} &
+\colhead{Elapsed Time} &
+\colhead{Total Exposure} \\
+\colhead{ID} &
+\colhead{} &
+\colhead{} &
+\colhead{} &
+\colhead{(ks)} &
+\colhead{(ks)}
+}
+%\colhead{Notes} \\
+
+
+\startdata
+
+EOP
+} else {
+  print <<'EOP';
+#
+# elapsed and exptime are rounded to nearest ks.
+#
+EOP
+  print join("\t",@cols),"\n";
+  print join("\t", qw/ S S S N N /), "\n";
+}
+
+my %global_opts = %opts;
+
+# output columns
+my (@obs_string,
+    @tstart,
+    @tstop,
+    @elapsed,
+    @exptime,
+    @fd_start,
+    @fd_stop,
+    );
+
+for my $i (0..$#olist) {
+
+  my @obsids = @{$olist[$i]};
+  my $det = $det[$i];
+
+  my %opts = (ref($obsids[-1]) eq 'HASH' ? %{(pop @obsids)} : ( ));
+
+  my (@tstart_this, @tstop_this);
+
+  my $livetime = 0;
+
+  for my $obsid (@obsids) {
+
+    my @evt2 = glob("$datadir/$obsid/tg_reprocess/*evt2.fits*");
+
+    @evt2 or warn("no evt2 file found for obsid $obsid"), next;
+    @evt2 == 1 or die "multilple evt2 files found for obsid $obsid";
+
+    my $evt2 = shift @evt2;
+
+    my $hdr = Astro::FITS::CFITSIO::fits_read_header($evt2.'[events]');
+
+    my ($evt2det) = $hdr->{DETNAM} =~ /^'(\S+).*/;
+    $evt2det eq 'HRC-'.$det or die "$obsid $evt2det $det";
+
+    push @tstart_this, $hdr->{TSTART};
+    push @tstop_this, $hdr->{TSTOP};
+
+    $livetime += $hdr->{LIVETIME};
+
+  }
+
+
+  my $tstart = pdl(\@tstart_this)->min;
+  my $tstop = pdl(\@tstop_this)->max;
+  my $elapsed = $tstop-$tstart;
+  my $exptime = $livetime;
+  my $fd_start = Astro::WCS::LibWCS::jd2fd(asc2jd($tstart));
+  my $fd_stop = Astro::WCS::LibWCS::jd2fd(asc2jd($tstop));
+
+  $_ =~ s/\.\d+$// for $fd_start, $fd_stop;
+
+  push @obs_string, (
+		     exists $opts{obsid_string} ? $opts{obsid_string} :
+		     $#obsids ? "$obsids[0]-$obsids[-1]" : $obsids[0]
+		    );
+  push @tstart, $tstart;
+  push @tstop, $tstop;
+  push @elapsed, $elapsed;
+  push @exptime, $exptime;
+  push @fd_start, $fd_start;
+  push @fd_stop, $fd_stop;
+}
+
+if ($opts{sort}) {
+  my @sorti = pdl(\@tstart)->qsorti->list;
+  @{$_} = @{$_}[@sorti] for \( @obs_string,
+			       @tstart,
+			       @tstop,
+			       @elapsed,
+			       @exptime,
+			       @fd_start,
+			       @fd_stop,
+			       @det,
+			     );
+}
+
+for my $i (0..$#obs_string) {
+
+  print join(($global_opts{latex} ? ' & ' : "\t"),
+	     $obs_string[$i],
+	     $det[$i],
+	     $fd_start[$i],
+	     $fd_stop[$i],
+	     round($elapsed[$i]/1e3),
+	     round($exptime[$i]/1e3),
+	    ), ($global_opts{latex} ? " \\\\\n" : "\n");
+}
+
+if ($opts{latex}) {
+  print <<'EOP';
+
+%\multicolumn{6}{l}{U\ Treated as an upper limit} \\
+%\multicolumn{6}{l}{4.\ Possible blend Fe XVIII 16.023} \\
+\enddata
+\end{deluxetable}
+
+EOP
+}
+
+sub round {
+  return int($_[0] + ($_[0]<0 ? -0.5 : 0.5));
+}

@@ -1,0 +1,1 @@
+/data/fubar/SCAR/pro/misc/zion2symb.pro

@@ -1,0 +1,1 @@
+/data/fubar/Cats/EOSCAT/eoscat.pro

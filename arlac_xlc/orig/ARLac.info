@@ -1,0 +1,27 @@
+AR Lac / HD 210334 / SAO 51684 / HIP 109303 / HR 8448 / BD+45 3813
+==================================================================
+
+          	    RA     	   Dec     	  	RA	Dec
+FK5 2000.0	22:08:41.07	+45:44:29.7	::	332.171	+45.7414
+FK4 1950.0	22:06:39.43	+45:29:45.6	::	331.663	+45.4958
+
+Galactic	95.56     	-8.30
+
+Spectral Type:	G2IV/K0IV  [ SB2 RSCVn ]
+
+parallax=23.79 mas
+distance=42-47 pc
+
+mV=6.85
+mB=6.13
+
+M_V:		3.5/3.3
+mass:		r1.30/r1.30 M_Sun
+radii:		1.8/3.1 R_Sun
+vsini:		46/81 km/s
+orbital period:	1.983222 days
+conjunction:	26624.3628 HJD-2400000 (hotter star behind)
+asini:		3.17/3.15 Mkm == 0.451/0.448 mas
+inclination:	87 degrees (incl. of pole of orbital plane/rotation axis)
+
+NOTE: Pete Ratzlaff is using the ephemeris (2445611.6290,1.98316)

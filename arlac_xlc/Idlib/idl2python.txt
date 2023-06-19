@@ -1,0 +1,89 @@
+
+examples	IDL			python 
+-----------------------------------------------------------------
+load module	.run module		import module
+		or call function
+
+run script	.run script		run -i script
+					execfile(script)
+		cannot be looped	can be looped
+		always pass variables	-i or execfile pass variables
+
+run batch file	@batch			runlog batch
+					run batch
+
+		idl < batch.pro		python batch.py
+					./batch.py
+			
+-----------------------------------------------------------------
+variable check	keyword_set(x)		"x" in locals()
+		n_elements(x)		"x" in globals()
+
+		help			whos
+		help,x			x? 	
+		help,x,/str		x?? or x.<Tab>
+					x.dtype.names
+					dir(x)
+					(some don't work inside the script)
+
+-----------------------------------------------------------------
+module					import numpy as np
+
+array sorting	o=sort(x)		o=x.sort()
+		o=sort(x.var)		o=x.var.argsort()
+		x=x[o]			x=x[o]
+
+array sel.	w=where(statement)	w=(statement).nonzero()[0]
+		x=x[w]			x=x[w]
+
+array mani.	y=x^2 *(x ge 5.) $ 	y = x**2 *(x >= 5.) \
+		   +x *(x lt 5.)              +x *(x <  5.)  
+
+		y=(y<10.)>3.		choose?
+		y=(x>x^2)<x^3		choose?
+
+array concat.	x=[x,y]			x=np.hstack([y,a])
+		x=[y,x]			x=np.hstack([a,y])
+		x=x[0:5]		x=x[0:6]
+		x=x[5:*]		x=x[5:]
+		x=[x[0:5],y,x[6:]]	x=np.hstack([x[0:6],y,x[6:])
+		x=x[0:*:2]		x=x[::2]
+
+-----------------------------------------------------------------
+		fast 			with matplotlib: 
+		and non-interactive	slow, but interactive?
+
+module					import matplotlib.pyplot as plt
+
+window set	window,0		fig=plt.figure(1)
+		!p.multi=[0,2,3]	ax = fig.add_subplot(321)
+
+basic plot	plot,x,y,...		ax.plot(x,y,...)
+		oplot,x,y,...		ax.scatter(x,y,...)
+		plots,x,y,...
+		oploterror,...		ax.errorbar(x,y,...)
+
+plot options	plot,..., opt1=opt1	ax.opt1(...)
+		!p.opt1=opt1
+
+switch 		set_plot,'ps'		load pdf module for multi-page
+x<=>ps, pdf	device,...
+
+annotate	xyouts,...		ax.annotate
+		legend,...		ax.legend
+
+coordinates	/data			xycoords='data'
+		/normal 		xycoords='axes fraction'
+		 				='figure fraction'
+		/device			xycoords='axes pixels'
+						='figure pixels'
+
+					'offset points'
+					'polar', ....
+
+zorder		in the order of plot	zorder=#
+transpanrency	use z buffer		alpha=# (bug in scatter plot)
+
+-----------------------------------------------------------------
+
+http://www.insectnation.org/howto/academic-software

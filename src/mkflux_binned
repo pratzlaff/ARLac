@@ -1,0 +1,122 @@
+#! /usr/bin/perl -w
+use strict;
+
+=head1 NAME
+
+template - A template for Perl programs.
+
+=head1 SYNOPSIS
+
+cp template newprog
+
+=head1 DESCRIPTION
+
+blah blah blah
+
+=head1 OPTIONS
+
+=over 4
+
+=item --help
+
+Show help and exit.
+
+=item --version
+
+Show version and exit.
+
+=back
+
+=head1 AUTHOR
+
+Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> May 2012
+
+=head1 SEE ALSO
+
+perl(1).
+
+=cut
+
+my $version = '0.1';
+
+use FindBin;
+use Config;
+use Carp;
+use Chandra::Tools::Common qw/ read_bintbl_cols /;
+
+use Getopt::Long;
+my %default_opts = (
+		    perl => $^X,
+		    mkflux => $FindBin::Bin . '/mkflux',
+                    exec => 1,
+		    );
+my %opts = %default_opts;
+GetOptions(\%opts,
+	   'help!', 'version!', 'debug!',
+	   'perl=s', 'mkflux=s',
+	   'exec!', 'complete!', 'outdir=s',
+	   ) or die "Try --help for more information.\n";
+if ($opts{debug}) {
+  $SIG{__WARN__} = \&Carp::cluck;
+  $SIG{__DIE__} = \&Carp::confess;
+}
+$opts{help} and _help();
+$opts{version} and _version();
+
+my ($indir, $tdur) = (shift, shift);
+
+my @mkflux_args = @ARGV;
+
+my $evtglob = "$indir/tg_reprocess/*evt2_dtffilt.fits*";
+my ($evt) = glob($evtglob) or
+  die "no match for glob($evtglob)";
+
+my ($start, $stop) = read_bintbl_cols($evt, qw/ start stop /, { extname => 'gti' }) or die;
+
+my $total_time = $stop->at(-1) - $start->at(0);
+
+my $outdir = $opts{outdir} ? $opts{outdir} : "$indir/flux_$tdur";
+
+my $toff = 0;
+my $i = 0;
+
+while ($toff < $total_time) {
+
+  if (($total_time - $toff)/$tdur < 0.1 and !$opts{complete}) {
+    warn(sprintf("$outdir - ignoring final bin of %.0f seconds\n", $total_time - $toff));
+    last;
+  }
+
+  _run_command($opts{perl},
+	       $opts{mkflux},
+	       $indir,
+	       "--tdur=$tdur",
+	       "--toff=$toff",
+	       "--outdir=$outdir",
+	       '--postfix='.sprintf("%02d", $i),
+	       @mkflux_args
+	       );
+
+  ++$i;
+  $toff += $tdur;
+}
+
+exit 0;
+
+sub _help {
+  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
+}
+
+sub _version {
+  print $version,"\n";
+  exit 0;
+}
+
+sub _run_command {
+  my ($cmd, @args) = @_;
+  print STDERR join(' ', $cmd, map ( "'$_'", @args)),"\n\n";
+  if ($opts{'exec'}) {
+    system($cmd, @args);
+    die unless ($opts{errignore} or $? == 0);
+  }
+}

@@ -1,0 +1,6 @@
+See
+	${MACH}/${mach}_nr.h
+where
+	MACH='SGI' or 'SUN', and
+	mach='sgi' or 'sun'
+for a full description

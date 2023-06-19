@@ -1,0 +1,447 @@
+#! /usr/bin/perl -w
+use strict;
+
+use FindBin qw/ $RealBin /;
+use lib $RealBin;
+
+use ARLac qw/ phase /;
+
+=head1 NAME
+
+template - A template for Perl programs.
+
+=head1 SYNOPSIS
+
+cp template newprog
+
+=head1 DESCRIPTION
+
+blah blah blah
+
+=head1 OPTIONS
+
+=over 4
+
+=item --help
+
+Show help and exit.
+
+=item --version
+
+Show version and exit.
+
+=back
+
+=head1 AUTHOR
+
+Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> April 2013
+
+
+=head1 SEE ALSO
+
+perl(1).
+
+=cut
+
+my $version = '0.1';
+
+use FindBin;
+use Config;
+use Carp;
+
+use Math::Trig qw/ pi /;
+use PDL;
+use PDL::Graphics::PGPLOT;
+use Chandra::Tools::Common qw/ asc2jd read_bintbl_cols /;
+use PDL::IO::FITS;
+use Astrolib qw/ helio_jd /;
+
+use Getopt::Long;
+my %default_opts = (
+		    dev => 'collect.ps/cps',
+		    basedir => '/data/legs/rpete/data/ARLac',
+		    subdir => 'flux_full',
+		    hrci => 0,
+		    hrcs => 0,
+		    id => 'erg',
+		    );
+my %opts = %default_opts;
+GetOptions(\%opts,
+	   'help!', 'version!', 'debug!',
+	   'dev=s', 'hrci!', 'hrcs!', 'n=s',
+	   'basedir=s', 'subdir=s',
+	   'id=s',
+	   ) or die "Try --help for more information.\n";
+if ($opts{debug}) {
+  $SIG{__WARN__} = \&Carp::cluck;
+  $SIG{__DIE__} = \&Carp::confess;
+}
+$opts{help} and _help();
+$opts{version} and _version();
+
+$opts{hrci} or $opts{hrcs} or
+  die "use one or both of --hrci and -hrcs\n";
+
+my @obsids;
+my @dets;
+if ($opts{hrci}) {
+  push @obsids, ARLac::hrci_obsids();
+  push @dets, 'HRC-I';
+}
+if ($opts{hrcs}) {
+  push @obsids, ARLac::hrcs_obsids();
+  push @dets, 'HRC-S';
+}
+
+my $detstring = join ', ', @dets;
+
+print STDERR <<EOP;
+#
+# collecting data from $opts{basedir}
+# plotting to device $opts{dev}
+# detectors: $detstring
+EOP
+
+my $subdir = $opts{subdir};
+my $basedir = $opts{basedir};
+
+my (
+    @obsid, @exposure, @time,
+    @srccnt, @bgcnt,
+    @srcflux, @bgflux,
+    @srcarea, @bgarea,
+    @srcfrac, @bgfrac,
+    @netcnt, @netcnterr,
+    @expmap,
+    @flux, @fluxerr,
+   );
+
+my $i=0;
+
+for my $o (@obsids) {
+
+  $i++;
+  last if $opts{n} and $i>$opts{n};
+
+  my @f = glob("$basedir/$o/$subdir/flux_$opts{id}_[0-9]*.fits");
+#  @f or next; #warn("skipping obsid $o\n"), next;
+  @f or warn("skipping obsid $o\n"), next;
+
+  my $srcreg = "$basedir/$o/$subdir/src.reg";
+  my $bgreg = "$basedir/$o/$subdir/bg.reg";
+  -f $srcreg or
+    warn("could not find $srcreg, moving on\n"), next;
+  -f $bgreg or
+    warn("could not find $bgreg, moving on\n"), next;
+
+  my (undef, $srcx, $srcy, $srcr) = reg_desc($srcreg);
+  my (undef, $bgx, $bgy, $bgr1, $bgr2) = reg_desc($bgreg);
+
+  $srcx==$bgx and $srcy==$bgy and $srcr==$bgr1 or die $srcreg;
+
+  my $srcarea = reg_area($srcreg);
+  my $bgarea = reg_area($bgreg);
+
+
+  for my $i (0..$#f) {
+
+    my $fluxfile = $f[$i];
+
+    my ($postfix) = $fluxfile =~ /(\d+)\.fits$/ or die;
+
+    my $expmapfile = "$basedir/$o/$subdir/expmap_$opts{id}_$postfix.fits";
+    my $instmap = "$basedir/$o/$subdir/instmap_$opts{id}_$postfix.fits";
+    my $evt = "$basedir/$o/$subdir/evt2_tfilter$postfix.fits";
+    my $cntfile = "$basedir/$o/$subdir/img_clean$postfix.fits";
+
+    if (! -f $evt) {
+
+      # couldn't find a time-filtered evt2 for apparently time-binned run
+      $i and die $fluxfile;
+
+      ($evt) = glob("$basedir/$o/tg_reprocess/*evt2_dtffilt.fits*") or die $o;
+    }
+
+    my ($start, $stop) = read_bintbl_cols($evt, qw/ start stop /, { extname => 'gti' }) or die $evt;
+    my $time = 0.5 * ($start->at(0) + $stop->at(-1));
+
+    my ($cntimg, $fluximg, $expmapimg, $instmapimg);
+
+    eval { $cntimg = rfits($cntfile) };
+    $@ and warn($cntfile), next;
+
+    eval { $fluximg = rfits($fluxfile) };
+    $@ and warn($fluxfile), next;
+
+    eval { $expmapimg = rfits($expmapfile) };
+    $@ and warn($expmapfile), next;
+
+    eval { $instmapimg = rfits($instmap) };
+    $@ and warn($instmap), next;
+
+    defined $fluximg and defined $expmapimg and defined $instmapimg or die;
+
+    my $exposure = $fluximg->hdr->{EXPOSURE}+0;
+
+    my $srccnt = fits_img_sum($cntimg, $srcx, $srcy, 0, $srcr);
+    my $bgcnt = fits_img_sum($cntimg, $bgx, $bgy, $bgr1, $bgr2);
+
+    # exposure map background indices
+    my $expsrccoords = fits_img_annulus_ind($expmapimg, $srcx, $srcy, 0, $srcr);
+    my $srcpixels = +($expsrccoords->dims)[1];
+    my $srcfrac = which(
+			$expmapimg->index2d($expsrccoords->mv(0,-1)->dog)
+			> .015 * $expmapimg->index2d($expsrccoords->mv(0,-1)->dog)->max
+		       )->nelem / $srcpixels;
+
+    # exposure map background indices
+    my $expbgcoords = fits_img_annulus_ind($expmapimg, $bgx, $bgy, $bgr1, $bgr2);
+    my $bgpixels = +($expbgcoords->dims)[1];
+    my $bgfrac = which(
+		       $expmapimg->index2d($expbgcoords->mv(0,-1)->dog)
+		       > .015 * $expmapimg->index2d($expbgcoords->mv(0,-1)->dog)->max
+		      )->nelem / $bgpixels;
+
+    my $netcnt = $srccnt - $bgcnt * ($srcpixels * $srcfrac) / ($bgpixels * $bgfrac);
+    my $netcnterr = sqrt(
+			 $srccnt + $bgcnt *
+			 (($srcpixels * $srcfrac) / ($bgpixels * $bgfrac))**2
+			 );
+
+    my $expmapsrcval = $expmapimg->at(
+				      int($expsrccoords->slice('(0)')->avg),
+				      int($expsrccoords->slice('(1)')->avg),
+				      );
+    my $flux = $netcnt / $expmapsrcval;
+    my $fluxerr = $netcnterr / $expmapsrcval;
+
+
+=begin comment
+
+    my $srcflux = fits_img_sum($fluximg, $srcx, $srcy, 0, $srcr);
+    my $bgflux = fits_img_sum($fluximg, $bgx, $bgy, $bgr1, $bgr2);
+
+    # chipx/y limits for source events
+    my ($x, $y, $chipx, $chipy) = read_bintbl_cols($evt, qw/ x y chipx chipy /, { extname => 'events' } ) or die $evt;
+    my $ind = which(sqrt( ($x-$srcx)**2 + ($y-$srcy)**2 ) < $srcr);
+    my ($chipxmin, $chipxmax) = $chipx->index($ind)->minmax;
+    my ($chipymin, $chipymax) = $chipy->index($ind)->minmax;
+    my ($instmapx, $instmapy) = fits_img_xy($instmapimg);
+
+    my $instcoords = fits_img_box_ind($instmapimg,
+				   $chipxmin, $chipxmax,
+				   $chipymin, $chipymax,
+				   );
+    my $ea = $instmapimg->index2d($instcoords->slice('(0)'), $instcoords->slice('(1)'))->median;
+
+    # exposure map value (sec*cm^2*cnts/photon)
+    # my @expsrcind = fits_img_annulus_ind($expmapimg, $srcx, $srcy, 0, $srcr);
+    # warn "zero exposure elements in the source region - $expmap\n" if which($expmapimg->index2d(@expsrcind)==0)->nelem;
+    # my $expmapval = $expmapimg->index2d(@expsrcind)->median;
+
+=cut
+
+    push @obsid, $o;
+    push @exposure, $exposure;
+    push @time, $time;
+    push @flux, $flux;
+    push @fluxerr, $fluxerr;
+    push @netcnt, $netcnt;
+    push @netcnterr, $netcnterr;
+    push @srccnt, $srccnt;
+    push @bgcnt, $bgcnt;
+    push @srcarea, $srcarea;
+    push @bgarea, $bgarea;
+    push @srcfrac, $srcfrac;
+    push @bgfrac, $bgfrac;
+
+=begin comment
+
+    # my $netflux = $srcflux - $bgflux * $srcarea * $srcfrac / $bgarea / $bgfrac;
+    # my $cnts = $netflux * $expmapval;
+    # my $ph_per_cnt = $exposure * $ea / $expmapval;
+    # my $pherr = sqrt($cnts * $ph_per_cnt);
+    # my $netfluxerr = $pherr / $exposure / $ea;
+
+    my $netflux = $srcflux - $bgflux * $srcarea *$srcfrac / $bgarea / $bgfrac;
+
+
+    warn("negative EA from $instmap\n") if $ea < 0;
+    warn("negative exposure from $flux\n") if $exposure < 0;
+    warn("negative net flux from $flux\n") if $netflux < 0;
+    my $netfluxerr = 0;
+    if ($netflux * $exposure * $ea > 0) {
+      $netfluxerr =  sqrt($netflux * $exposure * $ea ) / $exposure / $ea;
+    }
+
+    push @netflux, $netflux;
+    push @netfluxerr, $netfluxerr;
+
+=cut
+
+  }
+
+}
+
+my $obsid = pdl \@obsid;
+my $exposure = pdl \@exposure;
+my $time = pdl \@time;
+my $flux = pdl \@flux;
+my $fluxerr = pdl \@fluxerr;
+my $netcnt = pdl \@netcnt;
+my $netcnterr = pdl \@netcnterr;
+my $srccnt = pdl \@srccnt;
+my $bgcnt = pdl \@bgcnt;
+my $srcarea = pdl \@srcarea;
+my $bgarea = pdl \@bgarea;
+my $srcfrac = pdl \@srcfrac;
+my $bgfrac = pdl \@bgfrac;
+
+my $jd = asc2jd($time);
+my $phase = phase($jd);
+
+$phase -= $phase->long;
+my $negind = which($phase < 0);
+(my $tmp = $phase->index($negind)) += 1;
+
+my $sorti = $time->qsorti;
+
+$_ = $_->index($sorti) for
+  $jd, $phase,
+  $obsid, $exposure, $time,
+  $flux, $fluxerr,
+  $netcnt, $netcnterr,
+  $srccnt, $bgcnt,
+  $srcarea, $bgarea,
+  $srcfrac, $bgfrac,
+;
+
+my @cols = qw/
+	       obsid
+	       phase
+	       rjd
+	       hrjd
+	       tmid
+	       exposure
+	       flux fluxerr
+	       netcnt netcnterr
+	       srccnt bgcnt
+	       srcarea bgarea
+	       srcfrac bgfrac
+	     /;
+
+print <<EOP;
+#
+# phase    - computed using Heliocentric Julian Date
+# rjd      - Reduced Julian Date
+# hrjd     - Heliocentric Reduced Julian Date
+# tmid     - AXAF Spacecraft Time
+# flux     - $opts{id} / s / cm^2
+# exposure - exposure time
+# srcarea  - area of the source region, in square pixels
+# bgarea   - area of the background region, in square pixels
+# srcfrac  - fraction of the source region which is exposed
+# bgfrac   - fraction of the background region which is exposed
+#
+EOP
+
+print join("\t", @cols), "\n";
+print join("\t", ('N')x@cols), "\n";
+
+wcols
+  "%d\t%.4f\t%.5f\t%.5f\t%.0f\t%.0f\t%.4g\t%.3g\t%.2f\t%.3f\t%d\t%d\t%.0f\t%.0f\t%.3g\t%.3g",
+  $obsid,
+  $phase,
+  $jd-2400000,
+  helio_jd($jd-2400000, ARLac::ra(), ARLac::dec()),
+  $time,
+  $exposure,
+  $flux, $fluxerr,
+  $netcnt, $netcnterr,
+  $srccnt, $bgcnt,
+  $srcarea, $bgarea,
+  $srcfrac, $bgfrac,
+  *STDOUT{IO};
+
+exit;
+
+dev $opts{dev}, { hardch => 1.5, hardlw => 3 };
+points $phase, $flux,
+  {
+   border => 1,
+   title => $detstring,
+   xtitle => '\gf',
+   ytitle => 'flux',
+ };
+hold;
+errb $phase, $flux, $fluxerr;
+
+
+exit 0;
+
+sub _help {
+  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
+}
+
+sub _version {
+  print $version,"\n";
+  exit 0;
+}
+
+sub reg_desc {
+  my $f = shift;
+
+  open(REG, '< '.$f) or die "$f: $!";
+  my @reg = <REG>;
+  close REG or die $!;
+
+  @reg == 2 or die;
+
+  my ($type, $params) = $reg[1] =~ /^(\w+)\(([^)]+)\)/ or die;
+  my @p = split ',', $params;
+
+  return $type, @p;
+}
+
+sub reg_area {
+  my $f = shift;
+
+  my ($type, @p) = reg_desc($f);
+
+  for ($type) {
+    $_ eq 'circle' and return 2*pi*$p[2]*$p[2];
+    $_ eq 'annulus' and return 2*pi*($p[3]*$p[3] - $p[2]*$p[2]);
+    die "region type '$type' is unhandled";
+  }
+
+}
+
+sub fits_img_sum {
+  my ($i, $xcen, $ycen, $r1, $r2) = @_;
+  my $coords = fits_img_annulus_ind($i, $xcen, $ycen, $r1, $r2);
+  my $tmp = $i->index2d( $coords->slice('(0)'), $coords->slice('(1)') );
+  $tmp->badflag(1);
+  return $tmp->sum;
+}
+
+sub fits_img_annulus_ind {
+  my ($i, ,$xcen, $ycen, $r1, $r2) = @_;
+  my ($x, $y) = fits_img_xy($i);
+  my $dist = sqrt( ($x-$xcen)**2 + ($y-$ycen)**2);
+  my $mask = ($dist > $r1) & ($dist < $r2);
+  die unless $mask->sum;
+  return whichND( $mask );
+}
+
+sub fits_img_box_ind {
+  my ($i, ,$x1, $x2, $y1, $y2) = @_;
+  my ($x, $y) = fits_img_xy($i);
+  return whichND( ($x>$x1) & ($x<$x2) & ($y>$y1) & ($y<$y2) );
+}
+
+sub fits_img_xy {
+  my $i = shift;
+  my $x = ($i->xvals+1-$i->hdr->{CRPIX1P})*$i->hdr->{CDELT1P} + $i->hdr->{CRVAL1P};
+  my $y = ($i->yvals+1-$i->hdr->{CRPIX2P})*$i->hdr->{CDELT2P} + $i->hdr->{CRVAL2P};
+  return $x, $y;
+}

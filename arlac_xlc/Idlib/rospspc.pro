@@ -1,0 +1,1 @@
+/data/fubar/Cats/ROSPSPC/rospspc.pro

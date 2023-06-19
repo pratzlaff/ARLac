@@ -1,0 +1,15 @@
+# C shell commands to define IDL environment variables and aliases.
+#
+# source this file from .cshrc.user
+#
+setenv IDL_DIR /soft/idl/idl
+#original
+#setenv IDL_PATH \+$IDL_DIR/lib:\+$IDL_DIR/examples
+#old
+#setenv IDL_PATH $IDL_PATH\:+$IDL_DIR/user_contrib\:+/home/kashyap/Idlib
+#
+setenv IDL_PATH $IDL_PATH\:+$IDL_DIR/lib\:+$IDL_DIR/resource\:+$IDL_DIR/user_contrib\:+$IDL_DIR/examples
+#alias idl $IDL_DIR/bin/idl
+alias idltool $IDL_DIR/bin/idltool
+alias idlhelp $IDL_DIR/bin/idlhelp
+alias idldemo $IDL_DIR/bin/idldemo

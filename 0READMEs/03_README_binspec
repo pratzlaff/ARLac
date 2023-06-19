@@ -1,0 +1,15 @@
+#! /bin/bash
+
+. src/functions.bash
+
+. ~/.bash_aliases
+shopt -s expand_aliases
+
+ciao -o
+
+obs=$(obsids)
+
+for o in $obs
+do
+    evt2_bin $datadir/$o/tg_reprocess/*_evt2.fits $datadir/$o/tg_reprocess/bin_400 400
+done

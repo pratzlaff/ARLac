@@ -1,0 +1,82 @@
+function angsep,in11,in12,in21,in22,radec=radec,deg=deg,radn=radn
+;+
+;functions	angsep
+;		calculates the angular separation between two pointings
+;		using the cosine formula for spherical triangles when the
+;		included angle is 90 degrees.
+;
+;OBSOLETE!  USE FUNCTION DELTANG
+;
+;parameters	in11	RA of pointing 1
+;		in12	Dec of pointing 1
+;		in21	RA of pointing 2
+;		in22	Dec of pointing 2
+;	if only in11 is supplied, then it is assumed to be a vector of the form
+;	[RA1_1, Dec1_1, RA2_1, Dec2_1, RA1_2, Dec1_2, RA2_2, Dec2_2, ...]
+;	if in11 and in12 are given, it is assumed that
+;	in11 ~ [RA1_1, Dec1_1, RA1_2, Dec1_2, ...] and
+;	in12 ~ [RA2_1, Dec2_1, RA2_2, Dec2_2, ...]
+;
+;keywords	radec	input RA is taken to be in decimal hours, and
+;			input Dec is taken to be in decimal degrees (default)
+;		deg	input is assumed to be in degrees
+;		radn	input is assumed to be in radians
+;
+;-
+
+n1 = n_params(0)
+
+if n1 eq 0 then begin
+  print, 'Usage: y = angsep(RA1,Dec1,RA2,Dec2,/radec(def),/deg,/radn)
+  print, '  obtains angular separation between two celestial positions'
+  print, '  OBSOLETE!  use function DELTANG instead!'
+  return,0.
+endif
+
+if n1 eq 1 then begin
+  ra1 = in11 & sz = size(ra1)
+  if sz(0) le 1 then begin
+    ra1 = decomp(in11,1,ncol=4) & dec1 = decomp(in11,2,ncol=4)
+    ra2 = decomp(in11,3,ncol=4) & dec2 = decomp(in11,4,ncol=4)
+  endif
+  if sz(0) eq 2 or sz(0) eq 3 then begin
+    x=reform(in11(0,*)) & ra1=decomp(x,1,ncol=2) & dec1=decomp(x,2,ncol=2)
+    x=reform(in11(1,*)) & ra2=decomp(x,1,ncol=2) & dec2=decomp(x,2,ncol=2)
+  endif
+  if sz(0) ge 4 then begin
+    ra1 = reform(in11(0,*)) & dec1 = reform(in11(1,*))
+    ra2 = reform(in11(2,*)) & dec2 = reform(in11(3,*))
+  endif
+endif
+
+if n1 eq 2 or n1 eq 3 then begin
+  sz = size(in11)
+  if sz(0) le 1 then begin
+    ra1 = decomp(in11,1,ncol=2) & dec1 = decomp(in11,2,ncol=2)
+    ra2 = decomp(in12,1,ncol=2) & dec2 = decomp(in12,2,ncol=2)
+  endif
+  if sz(0) gt 1 then begin
+    ra1 = reform(in11(0,*)) & dec1 = reform(in11(1,*))
+    ra2 = reform(in12(2,*)) & dec2 = reform(in12(3,*))
+  endif
+endif
+
+if n1 eq 4 then begin
+  ra1 = in11 & dec1 = in12 & ra2 = in21 & dec2 = in22
+endif
+
+intype = 0
+if keyword_set(deg) then intype = 1
+if keyword_set(radn) then intype = 2
+
+if intype eq 0 then begin & ra1 = ra1*15. & ra2 = ra2*15. & endif
+if intype le 1 then begin
+  ra1 = rad(ra1) & ra2 = rad(ra2) & dec1 = rad(dec1) & dec2 = rad(dec2)
+endif
+
+dra = ra1-ra2 & ddec = dec1-dec2 & val = acos(cos(dra)*cos(ddec))
+
+if intype le 1 then val = rad(val,/inv)
+
+return,val
+end

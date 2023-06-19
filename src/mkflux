@@ -1,0 +1,565 @@
+#! /usr/bin/perl -w
+use strict;
+
+=head1 NAME
+
+template - A template for Perl programs.
+
+=head1 SYNOPSIS
+
+cp template newprog
+
+=head1 DESCRIPTION
+
+blah blah blah
+
+=head1 OPTIONS
+
+=over 4
+
+=item --help
+
+Show help and exit.
+
+=item --version
+
+Show version and exit.
+
+=back
+
+=head1 AUTHOR
+
+Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> May 2012
+
+=head1 SEE ALSO
+
+perl(1).
+
+=cut
+
+my $version = '0.1';
+
+use FindBin;
+use Config;
+use Carp;
+
+use Getopt::Long;
+my %default_opts = (
+		    errignore => 0,
+		    exec => 1,
+		    skip => 0,
+		    toff => 0,
+		    tdur => 0,
+		    large => 1,
+		    hrcibgdir => '/data/legs/rpete/data/ARLac/hrci_bkgrnd',
+		    monoenergy => 0.5,
+#		    spectrumfile => '/data/legs/rpete/flight/ARLac/old/model_spec2.instmap',
+		    spectrumfile => '/data/legs/rpete/flight/ARLac/spectrum/spectrum_erg.txt',
+		    id => 'erg',
+		    instmap => 1,  # whether to create instrument map
+		    expmap => 1,   # whether to create exposure map
+		    asphist => 1,  # whether to run asphist
+		    );
+my %opts = %default_opts;
+GetOptions(\%opts,
+	   'help!', 'version!', 'debug!',
+           'exec!', 'errignore!',
+	   'toff=f', 'tdur=f',
+	   'outdir=s', 'postfix=s',
+	   'spectrumfile=s', 'id=s',
+	   'monoenergy=f',
+	   'forcecell!',
+	   'large!', 'skip!',
+	   'instmap!', 'expmap!', 'asphist!',
+	   ) or die "Try --help for more information.\n";
+
+if ($opts{debug}) {
+  $SIG{__WARN__} = \&Carp::cluck;
+  $SIG{__DIE__} = \&Carp::confess;
+}
+$opts{help} and _help();
+$opts{version} and _version();
+
+
+@ARGV == 1 or die "Usage: $0 [options] dir\n\tTry --help for more information\n";
+my $indir = shift;
+
+$opts{postfix} = '' unless exists $opts{postfix};
+
+use PDL;
+use PDL::Graphics::PGPLOT;
+use Chandra::Tools::Common qw/ read_bintbl_cols /;
+use Astro::FITS::CFITSIO;
+use Math::Trig qw/ pi /;
+use File::Path qw/ mkpath /;
+use File::Temp;
+
+use FindBin qw/ $RealBin /;
+use lib $RealBin;
+use ARLac;
+
+my $repro_dir = 'tg_reprocess';
+my $outdir = exists $opts{outdir} ? $opts{outdir} : "$indir/lc";
+
+# final output file
+my $flux = "$outdir/flux_$opts{id}_$opts{postfix}.fits";
+
+if ($opts{skip} and -s $flux) {
+  warn("$outdir - skipping since $flux exists\n");
+  exit;
+}
+
+#my $pdir = pdir_temp();
+#warn "$outdir - using parameter directory $pdir\n";
+
+mkpath($outdir);
+
+my $evtglob = "$indir/$repro_dir/*evt2_dtffilt.fits*";
+my $evt = glob($evtglob);
+$evt or die "could not glob $evtglob";
+
+my $dtfglob = "$indir/*/*dtf1*";
+my $dtf = glob($dtfglob);
+$dtf or die "could not glob $dtfglob";
+
+my $maskglob = "$indir/*/*msk1*";
+my $mask = glob($maskglob);
+$mask or die "could not glob $maskglob";
+
+my $bpixglob = "$indir/*/*bpix1*";
+my $bpix = glob($bpixglob);
+$bpix or die "could not glob $bpixglob";
+
+my $pcadglob = "$indir/*/pcad*";
+my $pcad = join(',', glob($pcadglob));
+$pcad  or die "could not glob $pcadglob";
+
+$evt and $dtf and $mask and $bpix and $pcad or die;
+
+my $hdr = Astro::FITS::CFITSIO::fits_read_header($evt.'[events]');
+
+my $detnam = $hdr->{DETNAM};
+($detnam) = $detnam =~ /^'(\S+)/ or die;
+#print "detnam=$detnam\n";
+$detnam eq 'HRC-I' or $detnam eq 'HRC-S' or die $detnam;
+
+my $cellfile = "$indir/cell_output.fits";
+
+if (! -f $cellfile or $opts{forcecell}) {
+
+  _run_command(qw/ punlearn celldetect /);
+  _run_command("celldetect",
+	       "infile=$evt",
+	       "outfile=$cellfile",
+	       "fixedcell=6",
+	       'maxlogicalwindow=2048',
+	       "clobber=yes",
+	      );
+}
+
+if ($opts{tdur}) {
+
+  my ($gti_start, $gti_stop) = read_bintbl_cols($evt, qw/ start stop /, { extname => 'gti' }) or die;
+
+  if ($gti_start->at(0) < $hdr->{TSTART}) {
+     die("gti start= ".$gti_start->at(0) . ' < TSTART=' . $hdr->{TSTART} );
+  }
+  if ($gti_stop->at(-1) > $hdr->{TSTOP}) {
+     warn("$outdir - gti stop= ".$gti_stop->at(-1) . ' > TSTOP=' . $hdr->{TSTOP} . "\n");
+  }
+
+  my $start = $gti_start->at(0)+$opts{toff};
+  my $stop = $start + $opts{tdur};
+
+  if ($stop > $gti_stop->at(-1) ) {
+     warn("$outdir - stop= " . $stop . ' > gti stop=' . $gti_stop->at(-1) . "\n");
+  }
+
+  _run_command(qw/ punlearn dmcopy /);
+  _run_command('dmcopy',
+               'infile='.$evt."[time=$start:$stop]",
+               "outfile=$outdir/evt2_tfilter$opts{postfix}.fits",
+               'clobber=yes',
+              );
+
+  $evt = "$outdir/evt2_tfilter$opts{postfix}.fits";
+  my $dtfstats = "$outdir/dtfstats$opts{postfix}.fits",
+
+  _run_command('punlearn', 'hrc_dtfstats');
+  _run_command('hrc_dtfstats',
+	       'infile=' . $dtf,
+	       'outfile=' . $dtfstats,
+	       'gtifile=' . $evt . '[gti]',
+	       'clobber=yes',
+	      );
+
+  my $hdr = Astro::FITS::CFITSIO::fits_read_header($evt.'[events]');
+  my ($dtcor) = read_bintbl_cols($dtfstats, 'dtcor', { extname => 'dtfstats' });
+  $dtcor = $dtcor->at(0);
+
+  my $ontime = $hdr->{ONTIME};
+  my $livetime = $dtcor * $ontime;
+
+  my %upd = (
+	     LIVETIME => sprintf('%12f', $livetime),
+	     EXPOSURE => sprintf('%12f', $livetime),
+	     DTCOR => sprintf('%12f', $dtcor)
+	    );
+  while (my ($k, $v) = each %upd) {
+    _run_command('punlearn', 'dmhedit');
+    _run_command('dmhedit',
+		 $evt,
+		 'filelist=',
+		 'op=add',
+		 'key=' . $k,
+		 'value=' . $v,
+		);
+  }
+
+}
+
+my ($src_ra, $src_dec, $src_x, $src_y, $src_detsize, $src_bkgsize) = read_bintbl_cols($cellfile, qw/ ra dec x y detsize bkgsize /, { extname => 'srclist' }) or die;
+my $src_dist =sqrt( ( ($src_ra - ra()) * cos(dec() * 2 * pi / 360) )**2 + ($src_dec - dec())**2);
+my $src_index = $src_dist->qsorti->at(0);
+printf "RA = %.5f, DEC = %.5f\n", ra(), dec();
+print "celldetect source index = $src_index\n";
+
+$_ = $_->at($src_index) for $src_ra, $src_dec, $src_x, $src_y, $src_detsize, $src_bkgsize;
+
+$_ = sprintf("%.0f", $_) for $src_x, $src_y;
+
+my ($src_rad, $bg_rad) = radii($cellfile);
+my $binning = int($bg_rad/200) + 1;
+for ($src_rad, $bg_rad) {
+  $_ += $binning - $_ % $binning if $_ % $binning;
+}
+
+# my $src_rad = $src_detsize * 4;
+# my $bg_rad = $src_rad + 2 * $src_bkgsize;
+
+# if ($bg_rad > 500) {
+#   $src_rad = $src_detsize * 2;
+#   $bg_rad = $src_rad + $src_bkgsize;
+# }
+
+if ( $bg_rad > 500 ) {
+
+  if (!$opts{large}) {
+    die "$outdir - bg radius = $bg_rad is too large, use --large to force\n";
+  }
+
+  # # rescale the radius to be 1000 pixels maximum
+  # if ($bg_rad > 1000) {
+  #   my $ratio = 1000/$bg_rad;
+
+  #   my $new_src_rad = int($ratio * $src_rad);
+  #   my $new_bg_rad = int($ratio * $bg_rad);
+
+  #   warn "$outdir - rescaling radii: src $src_rad -> $new_src_rad, bg $bg_rad -> $new_bg_rad\n";
+
+  #   $src_rad = $new_src_rad;
+  #   $bg_rad = $new_bg_rad;
+  # }
+
+}
+
+mk_regions($src_x, $src_y, $src_rad, $bg_rad, "$outdir/src.reg", "$outdir/bg.reg", "$outdir/both.reg");
+
+my $xgrid = sprintf("%.0f:%.0f:$binning", $src_x-$bg_rad, $src_x+$bg_rad);
+my $ygrid = sprintf("%.0f:%.0f:$binning", $src_y-$bg_rad, $src_y+$bg_rad);
+
+my ($chipx, $chipy, $chip_id) = read_bintbl_cols($evt, qw/ chipx chipy chip_id /, { extname => 'events', rfilter => sprintf("circle(%g,%g,%g,x,y)", $src_x, $src_y, $bg_rad) }) or die;
+
+my $uniq_chip_id = $chip_id->qsort->uniq;
+$uniq_chip_id->nelem == 1 or die;
+$chip_id = $chip_id->at(0);
+
+$chip_id = '' if $detnam eq 'HRC-I';
+
+#_run_command(qw/ punlearn ardlib /);
+_run_command(qw/ pset ardlib /, 'AXAF_'.$detnam.'_BADPIX_FILE='.$bpix );
+
+
+my ($chipxmin, $chipxmax) = $chipx->minmax;
+
+my ($chipymin, $chipymax) = $chipy->minmax;
+
+my $chipextra = 200;
+$_-= $chipextra for $chipxmin, $chipymin;
+$_+= $chipextra for $chipxmax, $chipymax;
+
+my $instgridx="$chipxmin:$chipxmax:1";
+my $instgridy="$chipymin:$chipymax:1";
+
+if (0) {
+
+_run_command(qw/ punlearn fluximage /);
+_run_command('fluximage',
+             'infile='.$evt."[sky=region($outdir/both.reg),pi=[0:300]",
+             'outroot=flux'.$opts{postfix},
+             'binsize=1',
+             'bands=::1.1',
+             'asolfile='.$pcad,
+             'badpix='.$bpix,
+             'maskfile='.$mask,
+             'dtffile='.$dtf,
+             'cleanup=no',
+             'clobber=yes',
+             'verbose=3',
+             );
+exit;
+
+}
+
+my $img = "$outdir/img$opts{postfix}.fits";
+_run_command(qw/ punlearn dmcopy /);
+_run_command('dmcopy',
+             'infile='.$evt."[pi=0:300][bin x=$xgrid,y=$ygrid][opt type=i4,mem=500]",
+             "outfile=$img",
+             'clobber=yes',
+            );
+
+if (0 and $detnam eq 'HRC-I') {
+
+  my $ra_pnt = $hdr->{RA_PNT};
+  my $dec_pnt = $hdr->{DEC_PNT};
+  my $roll_pnt = $hdr->{ROLL_PNT};
+
+  $_+=0 for $ra_pnt, $dec_pnt, $roll_pnt;
+
+  my $bgevt = choose_hrci_bg($hdr);
+
+  _run_command(qw/ punlearn dmcopy /);
+  _run_command('dmcopy',
+               'infile='.$bgevt."[chipx=$chipxmin:$chipxmax,chipy=$chipymin:$chipymax]",
+               "outfile=$outdir/hrci_bg$opts{postfix}.fits",
+               'clobber=y'
+              );
+  $bgevt = "$outdir/hrci_bg$opts{postfix}.fits";
+
+  _run_command(qw/ punlearn dmhedit /);
+  _run_command('dmhedit', $bgevt, 'filelist=none', 'operation=add', 'key=RA_PNT', 'value='.$ra_pnt, 'datatype=indef');
+  _run_command('dmhedit', $bgevt, 'filelist=none', 'operation=add', 'key=DEC_PNT', 'value='.$dec_pnt, 'datatype=indef');
+  _run_command('dmhedit', $bgevt, 'filelist=none', 'operation=add', 'key=ROLL_PNT', 'value='.$roll_pnt, 'datatype=indef');
+
+
+  _run_command(qw/ punlearn reproject_events /);
+  _run_command('reproject_events',
+               'infile='.$bgevt,
+               "outfile=$outdir/hrci_bg_filt_reproj$opts{postfix}.fits",
+               'aspect='.$pcad,
+               'match='.$evt,
+               'random=0',
+               'clobber=yes',
+              );
+  $bgevt = "$outdir/hrci_bg_filt_reproj$opts{postfix}.fits";
+
+  my $hrci_bg_img = "$outdir/hrci_bg_img$opts{postfix}.fits";
+  _run_command(qw/ punlearn dmcopy /);
+  _run_command('dmcopy',
+               'infile='.$bgevt."[bin x=$xgrid,y=$ygrid][opt type=i4,mem=500]",
+               "outfile=$hrci_bg_img",
+               'clobber=yes',
+              );
+
+  _run_command('dmimgcalc',
+               "infile=$img,$hrci_bg_img",
+               'infile2=none',
+               "outfile=$outdir/tmp.fits",
+               'op=imgout=img1-((img1_exposure/img2_exposure)*img2)',
+               'clobber=yes'
+              );
+  _run_command('mv', "$outdir/tmp.fits", $img);
+}
+
+my $asphist = "$outdir/asphist$opts{postfix}.fits";
+if ($opts{asphist}) {
+  _run_command(qw/ punlearn asphist /);
+  _run_command('asphist',
+	       'infile='.$pcad,
+	       "outfile=$asphist",
+	       "evtfile=$evt",
+	       "dtffile=$dtf",
+	       "clobber=yes",
+	      );
+}
+
+my $instmap = "$outdir/instmap_$opts{id}_$opts{postfix}.fits";
+if ($opts{instmap}) {
+  _run_command(qw/ punlearn mkinstmap /);
+  _run_command('mkinstmap',
+	       "obsfile=$asphist",
+	       "outfile=$instmap",
+	       "pixelgrid=$instgridx,$instgridy",
+	       ($opts{spectrumfile} ? 'spectrumfile='.$opts{spectrumfile} : 'monoenergy='.$opts{monoenergy} ),
+	       'maskfile='.$mask."[MASK$chip_id]",
+	       'detsubsys='.$detnam.$chip_id,
+	       'mode=h',
+	       'clobber=yes',
+	      );
+}
+
+my $expmap = "$outdir/expmap_$opts{id}_$opts{postfix}.fits";
+if ($opts{expmap}) {
+  _run_command(qw/ punlearn mkexpmap /);
+  _run_command('mkexpmap',
+	       "asphistfile=$asphist",
+	       "xygrid=$xgrid,$ygrid",
+	       'useavgaspect=no',
+	       'normalize=no',
+	       "instmapfile=$instmap",
+	       "outfile=$expmap",
+	       'clobber=yes',
+	      );
+}
+
+my $img_clean= "$outdir/img_clean$opts{postfix}.fits";
+_run_command(qw/ punlearn dmimgthresh /);
+_run_command('dmimgthresh',
+	     "infile=$img",
+	     "outfile=$img_clean",
+	     "expfile=$expmap",
+	     'cut=1.5%',
+	     'value=0.0',
+	     'clobber=yes'
+	    );
+
+_run_command('dmimgcalc',
+	     "infile=$img_clean",
+	     "infile2=$expmap",
+	     "outfile=$flux",
+	     'op=div',
+	     'clobber=yes',
+	    );
+
+#  printf "src_r = $src_rad, bg_r = $bg_rad, corr = %f\n\n", $src_rad**2 / ($bg_rad**2 - $src_rad**2);
+_run_command('dmstat',
+             'infile='.$flux."[sky=region($outdir/src.reg)]",
+             'centroid=no',
+            );
+_run_command('dmstat',
+             'infile='.$flux."[sky=region($outdir/bg.reg)]",
+             'centroid=no',
+            );
+
+exit;
+
+sub mk_regions {
+  my ($x, $y, $size_src, $size_bg, $outsrc, $outbg, $outboth) = @_;
+
+  open SRC, '> '.$outsrc or die $!;
+  print SRC "# Region file format: CIAO version 1.0\n";
+  print SRC "circle($x,$y,$size_src)\n";
+  close SRC or die $!;
+
+  open BG, '> '.$outbg or die $!;
+  print BG "# Region file format: CIAO version 1.0\n";
+  print BG "annulus($x,$y,$size_src,$size_bg)\n";
+  close BG or die $!;
+
+  open BOTH, '> '.$outboth or die $!;
+  print BOTH "# Region file format: CIAO version 1.0\n";
+  print BOTH "circle($x,$y,$size_bg)\n";
+  close BOTH or die $!;
+
+  return;
+}
+
+sub _run_command {
+  my ($cmd, @args) = @_;
+  print STDERR join(' ', $cmd, map ( "'$_'", @args)),"\n\n";
+  if ($opts{'exec'}) {
+    system($cmd, @args);
+    die unless ($opts{errignore} or $? == 0);
+  }
+}
+
+BEGIN {
+  my @_ra = (22, 8, 40.8180);
+  my @_dec = (45, 44, 32.116);
+
+  sub ra {
+    return 15 * ($_ra[0] + $_ra[1]/60 + $_ra[2]/3600);
+  }
+
+  sub dec {
+    return $_dec[0] + $_dec[1]/60 + $_dec[2]/3600;
+  }
+};
+
+sub _help {
+  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
+}
+
+sub _version {
+  print $version,"\n";
+  exit 0;
+}
+
+sub choose_hrci_bg {
+  my $hdr = shift;
+
+  my ($year) = $hdr->{'DATE-OBS'} =~/(\d{4})/ or die;
+
+  my @files = glob("$opts{hrcibgdir}/hrciD*statusfilter.fits") or die;
+
+  my @bg_years = map { /hrciD(\d4)/ } @files;
+
+  my @year_diff = map { my ($fyr) = /hrciD(\d{4})/; $year-$fyr; } @files;
+
+  # FIXME - deal with cases like 1999/2000???
+
+  my $file = $files[abs(pdl(\@year_diff))->qsorti->minimum_ind];
+  return $files[pdl(\@year_diff)->qsorti->min];
+}
+
+sub radii {
+
+  my $f = shift;
+
+  my $hdr = Astro::FITS::CFITSIO::fits_read_header($f.'[srclist]') or die $f;
+
+  my $ra_src = ARLac::ra();
+  my $dec_src = ARLac::dec();
+
+  my $ra_pnt = $hdr->{RA_PNT};
+  my $dec_pnt = $hdr->{DEC_PNT};
+
+  # FIXME change cos->cos^2 before the next full re-run?
+  my $off = sqrt( ($dec_pnt-$dec_src)**2 + ( cos(pi/180*$dec_src) * ($ra_pnt-$ra_src) )**2 );
+
+  $off *= 60;
+
+  # these parameters taken from output of src_sizes.pl
+  my $src_r = int(33 * $off + 100);
+  my $bg_r = int(1.7 * $src_r);
+
+  # whatever
+  $_ += $_%2 for $src_r, $bg_r;
+
+  return $src_r, $bg_r;
+
+}
+
+{
+  my $pdir;
+
+  sub pdir_temp {
+
+    return $pdir if $pdir;
+
+    my $key;
+    for my $k (qw/ PDIR PFILES UPARM /) {
+      exists $ENV{$k} and $key=$k, last;
+    }
+
+    my (undef, $sys) = split ';', $ENV{$key}, 2;
+    $sys or die "$key=$ENV{$key}"; 
+
+    $pdir = File::Temp->newdir();
+    $ENV{$key} = $pdir . ';' . $sys;
+
+    return $pdir;
+  }
+
+}

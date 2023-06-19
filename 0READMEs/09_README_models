@@ -1,0 +1,9 @@
+#! /bin/bash
+
+#
+# recreate best-fit model bands
+#
+
+rm -rf models
+mkdir models
+gdl ./src/model_lc.com

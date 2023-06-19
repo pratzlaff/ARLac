@@ -1,0 +1,32 @@
+#! /bin/bash
+
+outdir=./collected
+mkdir -p "$outdir"
+
+for det in hrci hrcs
+do
+    for id in erg ph
+    do
+	for s in 400 full
+	do
+
+	    rdb="$outdir/${det}_${s}_${id}.rdb"
+
+	    fluxplot="$outdir/${det}_${s}_${id}"
+	    rateplot="$outdir/${det}_${s}_rate"
+
+	    title='AR Lac: HRC-S'
+	    [ "$det" == "hrci" ] &&
+                title='AR Lac: HRC-I'
+
+            perl ./src/plotlc --title "$title" "$rdb" -dev "${fluxplot}.ps"/cps
+            perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${fluxplot}_noflare.ps"/cps
+
+
+	    [ "$id" == erg ] && {
+	        perl ./src/plotlc --title "$title" "$rdb" -dev "${rateplot}.ps"/cps --rate
+	        perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${rateplot}_noflare.ps"/cps --rate
+            }
+	done
+    done
+done
