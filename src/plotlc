@@ -306,6 +306,11 @@ sub xform_ci {
 sub set_ctab {
   my $name = shift;
   my ($l, $r, $g, $b) = lut_data($name);
+
+  # FIXME: default ramp seems to have a bug
+  $l->set(153, $l->at(152)+1e-6);
+  #print ($l->slice('150:154'),"\n");
+
   pgctab(
 	 $l->float->get_dataref,
 	 $r->float->get_dataref,
