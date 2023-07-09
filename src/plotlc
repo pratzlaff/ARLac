@@ -308,8 +308,8 @@ sub set_ctab {
   my ($l, $r, $g, $b) = lut_data($name);
 
   # FIXME: default ramp seems to have a bug
-  $l->set(153, $l->at(152)+1e-6);
-  #print ($l->slice('150:154'),"\n");
+  #$l->set(153, 0.5*($l->at(152)+$l->at(154)));
+  $l = sequence(256)/255;
 
   pgctab(
 	 $l->float->get_dataref,
