@@ -1,6 +1,7 @@
 #! /bin/bash
 
-outdir=./collected
+outdir=./collected/plots
+indir=./collected
 mkdir -p "$outdir"
 
 for det in hrci hrcs
@@ -10,7 +11,7 @@ do
 	for s in 400 full
 	do
 
-	    rdb="$outdir/${det}_${s}_${id}.rdb"
+	    rdb="$indir/${det}_${s}_${id}.rdb"
 
 	    fluxplot="$outdir/${det}_${s}_${id}"
 	    rateplot="$outdir/${det}_${s}_rate"
@@ -19,13 +20,13 @@ do
 	    [ "$det" == "hrci" ] &&
                 title='AR Lac: HRC-I'
 
-            perl ./src/plotlc --title "$title" "$rdb" -dev "${fluxplot}.ps"/cps
-            perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${fluxplot}_noflare.ps"/cps
+            perl ./src/plotlc --title "$title" "$rdb" -dev "${fluxplot}.pdf"/pdf
+            perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${fluxplot}_noflare.pdf"/pdf
 
 
 	    [ "$id" == erg ] && {
-	        perl ./src/plotlc --title "$title" "$rdb" -dev "${rateplot}.ps"/cps --rate
-	        perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${rateplot}_noflare.ps"/cps --rate
+	        perl ./src/plotlc --title "$title" "$rdb" -dev "${rateplot}.pdf"/pdf --rate
+	        perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${rateplot}_noflare.pdf"/pdf --rate
             }
 	done
     done

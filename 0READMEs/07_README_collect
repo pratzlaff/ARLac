@@ -9,23 +9,9 @@ do
     do
 	for s in 400 full
 	do
-
-	    #
-	    # perl 5.22.1 is now outputting annoying warnings
-	    #
-	    # Negative repeat count does nothing at Basic/Core/Core.pm.PL (i.e. PDL::Core.pm) line 1604.
-	    #
-	    # from the debugger, this is coming from
-	    #
-	    # PDL::dummy(Basic/Core/Core.pm.PL (i.e. PDL::Core.pm):1604):
-	    # 1604:      $s .= '*1,' x ( $dim-$pdl->getndims );
-	    #
-	    # For now, just use shell ouput redirection to ignore the warning
-
 	    rdball="$outdir/${det}_${s}_${id}.rdb"
+            perl ./src/collect --$det --id=$id --subdir=flux_$s 2>&1 1>"$rdball"
 	    rdbnobad="$outdir/${det}_${s}_${id}_nobad.rdb"
-
-            perl ./src/collect --$det --id=$id --subdir=flux_$s 2>&1 1>"$rdball" #| grep -v 'Negative repeat'
 	    perl ./src/strip_bad.pl "$rdball" > "$rdbnobad"
 
 	done

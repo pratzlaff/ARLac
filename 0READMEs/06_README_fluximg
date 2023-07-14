@@ -4,13 +4,13 @@
 perl=/proj/axaf/bin/perl
 [[ `hostname` = @(milagro|legs) ]] && perl=perl
 . /data/legs/rpete/flight/analysis_functions/util.bash
+. src/functions.bash
 obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::hrci_obsids()")
 obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids()")
-obsids=$($perl -le 'print join " ", (24546..24566)')
-obsids=25592
+obsids=$(obsids)
 screen -dmS arlac bash -c 'exec bash'
-n=12
-for i in {1..12}
+n=6
+for i in {1..6}
 do
   o=$(i_of_n $i $n $obsids)
   screen -S arlac -X screen bash -c "time /bin/bash 0READMEs/06_README_fluximg $o; exec bash"
@@ -130,8 +130,12 @@ false && {
     do
         echo $o
         dir=/data/legs/rpete/data/ARLac/$o/flux_full
-        ds9 -cmap Heat -zoom to fit -scale log -scale mode 99.5 \
+        ds9 \
             $dir/img_clean0.fits \
+	    -cmap Heat \
+	    -zoom to fit \
+	    -scale log \
+	    -scale mode 99.5 \
             -regions $dir/src.reg \
             -regions $dir/bg.reg
     done

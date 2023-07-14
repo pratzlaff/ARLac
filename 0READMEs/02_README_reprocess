@@ -14,8 +14,8 @@ ciao -o
 tg_reprocess=/data/legs/rpete/flight/dev/tg_reprocess
 
 # list of obsids
-obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids($i,$n)")
-obsids=$(perl -le 'print join " ", (24546..24566)')
+#obs=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids($i,$n)")
+obsids=$(obsids)
 
 # whether to force reprocessing if tg_reprocess output already exists
 force=1

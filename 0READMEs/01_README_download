@@ -13,7 +13,7 @@ ciao -o
 
 # list of obsids
 obsids=$($perl -I./src -MARLac -le 'print join " ", ARLac::obsids()')
-obsids=$(perl -le 'print join " ", (24546..24566)')
+obsids=$(obsids)
 
 mkdir -p $datadir
 cd $datadir
