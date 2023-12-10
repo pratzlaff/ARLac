@@ -48,13 +48,13 @@ base=/data/legs/rpete/data/ARLac
 
 punlearn ardlib
 
-i_qe=13
+i_qe=14
 i_qe_dir=/data/legs/rpete/flight/hrci_qe/N00${i_qe}/qe
 
 s_qe=16
 s_qe_dir=/data/legs/rpete/flight/hrcs_qe/N00${s_qe}/qe
 
-s_qeu=15
+s_qeu=17
 s_qeu_dir=/data/legs/rpete/flight/hrcs_qeu/ARD/v${s_qeu}/qeu
 
 # Don't do this until all instrument maps are ready to be recreated
