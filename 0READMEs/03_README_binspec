@@ -1,5 +1,9 @@
 #! /bin/bash
 
+# for some reason this exits evt2_bin after the first bin
+#set -e
+set -o pipefail
+
 . src/functions.bash
 
 . ~/.bash_aliases

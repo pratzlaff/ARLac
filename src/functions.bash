@@ -75,6 +75,7 @@ evt2_bin()
     $perl /data/legs/rpete/flight/xcal/src/bintimes.pl "$evt2" "$bin" |
     while read start stop elapsed
     do
+	echo $start $stop $elapsed
 	local outevt2="$outdir/evt2_"$(printf "%02d" $i)'.fits'
 	local outdtfstat="$outdir/dtfstat_"$(printf "%02d" $i)'.fits'
 	dmcopy "$evt2""[time=$start:$stop]" "$outevt2" clobber=yes

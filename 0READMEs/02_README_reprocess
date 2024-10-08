@@ -1,5 +1,8 @@
 #! /bin/bash
 
+set -e
+set -o pipefail
+
 i=$1
 n=$2
 
@@ -11,7 +14,7 @@ ciao -o
 . src/functions.bash
 . /data/legs/rpete/flight/analysis_functions/tmppdir.bash
 
-tg_reprocess=/data/legs/rpete/flight/dev/tg_reprocess
+tg_reprocess=/data/legs/rpete/flight/devel/tg_reprocess
 
 # list of obsids
 #obs=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids($i,$n)")
