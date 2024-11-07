@@ -1,5 +1,8 @@
 #! /bin/bash
 
+set -e
+set -o pipefail
+
 outdir=./collected/plots
 indir=./collected
 mkdir -p "$outdir"
@@ -20,6 +23,8 @@ do
 	    [ "$det" == "hrci" ] &&
                 title='AR Lac: HRC-I'
 
+	    echo "$rdb" $id $s 1>&2
+
             perl ./src/plotlc --title "$title" "$rdb" -dev "${fluxplot}.pdf"/pdf
             perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${fluxplot}_noflare.pdf"/pdf
 
@@ -28,6 +33,9 @@ do
 	        perl ./src/plotlc --title "$title" "$rdb" -dev "${rateplot}.pdf"/pdf --rate
 	        perl ./src/plotlc --noflare --title "$title" "$rdb" -dev "${rateplot}_noflare.pdf"/pdf --rate
             }
+	    echo '' 1>&2
 	done
     done
 done
+
+perl ./src/plotlc --title 'AR Lac: HRC' --iscale 0.86 ./collected/hrci_400_erg.rdb ./collected/hrcs_400_erg.rdb --noflare -dev $outdir/hrc_erg_noflare.pdf/pdf

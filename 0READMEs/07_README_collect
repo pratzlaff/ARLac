@@ -1,5 +1,8 @@
 #! /bin/bash
 
+set -e
+set -o pipefail
+
 outdir=./collected
 mkdir -p "$outdir"
 

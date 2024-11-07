@@ -1,35 +1,28 @@
 #! /bin/bash
 
-<<'COMMENT'
-perl=/proj/axaf/bin/perl
-[[ `hostname` = @(milagro|legs) ]] && perl=perl
-. /data/legs/rpete/flight/analysis_functions/util.bash
-. src/functions.bash
-obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::hrci_obsids()")
-obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids()")
-obsids=$(obsids)
-screen -dmS arlac bash -c 'exec bash'
-n=6
-for i in {1..6}
-do
-  o=$(i_of_n $i $n $obsids)
-  screen -S arlac -X screen bash -c "time /bin/bash 0READMEs/06_README_fluximg $o; exec bash"
-done
-screen -rS arlac
-COMMENT
+set -e
+set -o pipefail
 
-# # something like,
-# # screen -dmS arlac bash -c 'exec bash'
-# # for i in {1..6}; do screen -xS arlac -X screen bash -c "/bin/bash 0READMEs/03_README_fluximg $i 6; exec bash"; done
-# 
-# i=$1
-# n=$2
-# #obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids($i,$n)")
-# obsids=$($perl -le 'print join " ", (24644,22751..22771,24525..24545)')
-# obsids=$($perl -I./src -MARLac=split_array -e "\$i=$i; \$n=$n; "'@obsids=(24644,22751..22771,24525..24545); print join " ", @{(split_array($n, @obsids))[$i-1]};')
-# 
-# echo $obsids
-# exit
+mkfluxes() {
+    n=21
+    [ $# -eq 1 ] && n=$1
+    . src/functions.bash
+    . /data/legs/rpete/flight/analysis_functions/util.bash
+    perl=/proj/axaf/bin/perl
+    [[ `hostname` = @(milagro|legs) ]] && perl=perl
+    obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::hrci_obsids()")
+    obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids()")
+    obsids=$(obsids)
+    sname=arlac
+    screen -dmS $sname
+    eval "for i in {1..$n}"'
+    do
+        o=$(i_of_n $i '"$n"' $obsids)
+        screen -S '$sname' -X screen bash -c "time ./0READMEs/06_README_fluximg $o; #exec bash"
+    done'
+    screen -S $sname -p0 -X kill
+    screen -rS $sname
+}
 
 obsids="$@"
 
@@ -48,7 +41,7 @@ base=/data/legs/rpete/data/ARLac
 
 punlearn ardlib
 
-i_qe=15
+i_qe=16
 i_qe_dir=/data/legs/rpete/flight/hrci_qe/N00${i_qe}/qe
 
 s_qe=17

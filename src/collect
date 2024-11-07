@@ -80,7 +80,10 @@ $opts{help} and _help();
 $opts{version} and _version();
 
 $opts{hrci} or $opts{hrcs} or
-  die "use one or both of --hrci and -hrcs\n";
+  die "use one of --hrci or -hrcs\n";
+
+$opts{hrci} and $opts{hrcs} and
+  die "use only one of --hrci or -hrcs\n";
 
 my @obsids;
 my @dets;
@@ -330,8 +333,13 @@ my @cols = qw/
 	       srcfrac bgfrac
 	     /;
 
+my $detnam;
+$detnam='hrci' if $opts{hrci};
+$detnam='hrcs' if $opts{hrcs};
+
 print <<EOP;
 #
+# detector - $detnam
 # phase    - computed using Heliocentric Julian Date
 # rjd      - Reduced Julian Date
 # hrjd     - Heliocentric Reduced Julian Date

@@ -1,5 +1,45 @@
 #! /usr/bin/perl
 
+=head1 NAME
+
+template - A template for Perl programs.
+
+=head1 SYNOPSIS
+
+cp template newprog
+
+=head1 DESCRIPTION
+
+blah blah blah
+
+=head1 OPTIONS
+
+=over 4
+
+=item --help
+
+Show help and exit.
+
+=item --version
+
+Show version and exit.
+
+=back
+
+=head1 AUTHOR
+
+Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> May 2012
+
+=head1 SEE ALSO
+
+perl(1).
+
+=cut
+
+sub _help {
+  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
+}
+
 use warnings;
 use strict;
 
@@ -39,6 +79,8 @@ my %default_opts = (
 		    bad => 0,
 		    flare => 1,
 		    zerofluxerr => 0,
+		    iscale => 1.0,
+		    sscale => 1.0,
 		   );
 my %opts = %default_opts;
 GetOptions(\%opts,
@@ -49,7 +91,7 @@ GetOptions(\%opts,
 	   'mfile=s', 'pmodel!', 'model=s', 'flare!',
 	   'iter!', 'zerofluxerr!', 'bad!',
 	   'rodono!', 'lu!', 'siviero1!', 'siviero3!', 'norm=f',
-	   'rate!',
+	   'iscale=f', 'sscale=f', 'rate!',
 	  ) or die "Try --help for more information.\n";
 if ($opts{debug}) {
   $SIG{__WARN__} = \&Carp::cluck;
@@ -88,18 +130,26 @@ else {
   push @cols, qw/ flux fluxerr /;
 }
 
+my %scales = ( hrci => $opts{iscale},
+	       hrcs => $opts{sscale},
+	     );
+
 for my $rdb (@rdb) {
 
-  my @rdb_header = grep /^# flux\s/, MyRDB::rdb_header($rdb) or die;
-  my ($this_id) = $rdb_header[0] =~ /(erg|ph)/ or die;
-  $id = $this_id unless defined $id;
+  my @rdb_header = MyRDB::rdb_header($rdb);
 
+  my ($this_id) = +(grep /^# flux\s/, @rdb_header)[0] =~ /(erg|ph)/ or die;
+  $id = $this_id unless defined $id;
   die "$this_id $id" unless $this_id eq $id;
+
+  my ($detnam) = +(grep /^# detector\s/, @rdb_header)[0] =~ /(hrci|hrcs)/ or die;
 
   #my ($o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, qw/ obsid phase rjd tmid exposure flux fluxerr /) or die;
   my ($o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, @cols) or die;
 
   $_ = pdl $_ for $o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1;
+
+  $_ *= $scales{$detnam} for $flux1, $fluxerr1;
 
   $o = $o->append($o1);
   $phase = $phase->append($phase1);
@@ -175,6 +225,8 @@ $stopi->set(-1, $phase->nelem-1);
 # print "\n";
 
 pgopen($opts{dev}) > 0 or die "could not open $opts{dev}";
+#pgpap(12, .125);
+
 
 pgscr(0,1,1,1);
 pgscr(1,0,0,0);
@@ -184,6 +236,7 @@ pgsch($opts{ch});
 pgscf(1);
 
 pgsvp(0.2, 0.9, 0.1, 0.9);
+#pgsvp(0, 1, 0, .125);
 my ($y1, $y2) = $flux->minmax;
 pgswin(-0.2, 1.2, 0, $flux->max * 1.1);
 pgbox('BCNST', 0, 0, 'BCNT', 0, 0);
@@ -285,7 +338,6 @@ sub draw_points {
 
 }
 
-
 sub xform_ci {
 
   my ($xx, $name, $min, $max) = @_;
@@ -372,7 +424,7 @@ sub plot_model_old {
 
   $norm = $opts{norm} if exists $opts{norm};
 
-  print "model normalization = $norm\n";
+  warn "model normalization = $norm\n";
 
   $_ *= $norm for values %lc;
 
@@ -491,51 +543,10 @@ sub model_bands {
   return $phase, $best_fit, $intensity->minimum, $intensity->maximum;
 }
 
-sub _help {
-  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
-}
-
 sub _version {
   print $version,"\n";
   exit 0;
 }
-
-=head1 NAME
-
-template - A template for Perl programs.
-
-=head1 SYNOPSIS
-
-cp template newprog
-
-=head1 DESCRIPTION
-
-blah blah blah
-
-=head1 OPTIONS
-
-=over 4
-
-=item --help
-
-Show help and exit.
-
-=item --version
-
-Show version and exit.
-
-=back
-
-=head1 AUTHOR
-
-Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> May 2012
-
-=head1 SEE ALSO
-
-perl(1).
-
-=cut
-
 
 __DATA__
 sub help {
@@ -560,4 +571,3 @@ Usage: $0 [options]
 EOP
   exit 0;
 }
-

@@ -7,8 +7,7 @@ datadir=/data/legs/rpete/data/ARLac
 obsids()
 {
     obsids=$(perl -I./src -MARLac -le 'print join(" ", ARLac::obsids())')
-    obsids=$(perl -le 'print join " ", (25571..25583, 25585..25591)')
-    obsids=$(perl -le 'print join " ", (25593..25613, 25571..25583, 25585..25591, 25592)')
+    obsids=$(perl -le 'print join " ", (28384..28394, 28395..28403)')
     echo $obsids
 }
 
