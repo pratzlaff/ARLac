@@ -118,7 +118,7 @@ elsif ($opts{siviero3}) {
 @ARGV or die "Usage: $0 [option] rdb1 rdb2 ...\n";
 my @rdb = @ARGV;
 
-my ($o, $phase, $rjd, $time, $flux, $fluxerr) = (pdl []) x 6;
+my ($o, $phase, $rjd, $time, $exptime, $flux, $fluxerr) = (pdl []) x 7;
 
 my $id;
 
@@ -144,10 +144,10 @@ for my $rdb (@rdb) {
 
   my ($detnam) = +(grep /^# detector\s/, @rdb_header)[0] =~ /(hrci|hrcs)/ or die;
 
-  #my ($o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, qw/ obsid phase rjd tmid exposure flux fluxerr /) or die;
-  my ($o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, @cols) or die;
+  #my ($o1, $phase1, $rjd1, $time1, $exptime1, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, qw/ obsid phase rjd tmid exposure flux fluxerr /) or die;
+  my ($o1, $phase1, $rjd1, $time1, $exptime1, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, @cols) or die;
 
-  $_ = pdl $_ for $o1, $phase1, $rjd1, $time1, $exptime, $flux1, $fluxerr1;
+  $_ = pdl $_ for $o1, $phase1, $rjd1, $time1, $exptime1, $flux1, $fluxerr1;
 
   $_ *= $scales{$detnam} for $flux1, $fluxerr1;
 
@@ -155,9 +155,10 @@ for my $rdb (@rdb) {
   $phase = $phase->append($phase1);
   $rjd = $rjd->append($rjd1);
   $time = $time->append($time1);
+  $exptime = $exptime->append($exptime1);
   if ($opts{rate}) {
-    $flux = $flux->append($flux1 / $exptime);
-    $fluxerr = $fluxerr->append($fluxerr1 / $exptime);
+    $flux = $flux->append($flux1 / $exptime1);
+    $fluxerr = $fluxerr->append($fluxerr1 / $exptime1);
   }
   else {
     $flux = $flux->append($flux1);
@@ -178,38 +179,40 @@ if (!$opts{zerofluxerr}) {
 
   my $ind = which($fluxerr != 0);
   warn sprintf("removing %d / %d \"zerofluxerr\" data points\n", $fluxerr->nelem- $ind->nelem, $fluxerr->nelem);
-  $_ = $_->index($ind) for $o, $phase, $flux, $fluxerr, $time;
+  $_ = $_->index($ind) for $o, $phase, $flux, $fluxerr, $time, $exptime;
 
 }
 
 if (!$opts{bad}) {
   my ($goodi, $badi) = ARLac::are_bad($o);
   warn sprintf("removing %d / %d \"bad\" data points\n", $badi->nelem, $o->nelem);
-  $_ = $_->index($goodi) for $o, $phase, $flux, $fluxerr, $time;
+  $_ = $_->index($goodi) for $o, $phase, $flux, $fluxerr, $time, $exptime;
 }
 
 if (!$opts{flare}) {
   my ($goodi, $badi) = ARLac::are_flare($o);
   warn sprintf("removing %d / %d \"flare\" data points\n", $badi->nelem, $o->nelem);
-  $_ = $_->index($goodi) for $o, $phase, $flux, $fluxerr, $time;
+  $_ = $_->index($goodi) for $o, $phase, $flux, $fluxerr, $time, $exptime;
 }
+
+printf STDERR "Plotted exposure time is %.1f\n", $exptime->sum/1e3;
 
 my $dup_index;
 
 $dup_index = which($phase < 0.2);
 if ($dup_index->nelem) {
   $phase = $phase->append($phase->index($dup_index)+1.0);
-  $_ = $_->append($_->index($dup_index)) for $o, $flux, $fluxerr, $time;
+  $_ = $_->append($_->index($dup_index)) for $o, $flux, $fluxerr, $time, $exptime;
 }
 
 $dup_index = which(($phase > 0.8) & ($phase < 1.0));
 if ($dup_index->nelem) {
   $phase = $phase->append($phase->index($dup_index)-1.0);
-  $_ = $_->append($_->index($dup_index)) for $o, $flux, $fluxerr, $time;
+  $_ = $_->append($_->index($dup_index)) for $o, $flux, $fluxerr, $time, $exptime;
 }
 
 my $ind = $time->qsorti;
-$_ = $_->index($ind) for $o, $phase, $time, $flux, $fluxerr;
+$_ = $_->index($ind) for $o, $phase, $time, $exptime, $flux, $fluxerr;
 
 my $gap = 1e6;
 

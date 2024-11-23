@@ -11,7 +11,7 @@ for det in hrci hrcs
 do
     for id in erg ph
     do
-	for s in 400 full
+	for i s in 400 full
 	do
 
 	    rdb="$indir/${det}_${s}_${id}.rdb"
