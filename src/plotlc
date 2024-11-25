@@ -87,11 +87,12 @@ GetOptions(\%opts,
 	   'help!', 'version!', 'debug!',
 	   'dev=s',
 	   'tcolor!', 'cmap=s', 'wedge!',
-	   'lw=i', 'ch=f', 'title=s',
+	   'lw=f', 'ch=f', 'title=s',
 	   'mfile=s', 'pmodel!', 'model=s', 'flare!',
 	   'iter!', 'zerofluxerr!', 'bad!',
 	   'rodono!', 'lu!', 'siviero1!', 'siviero3!', 'norm=f',
 	   'iscale=f', 'sscale=f', 'rate!',
+	   'poster!',
 	  ) or die "Try --help for more information.\n";
 if ($opts{debug}) {
   $SIG{__WARN__} = \&Carp::cluck;
@@ -115,8 +116,20 @@ elsif ($opts{siviero3}) {
   $phasesub = \&ARLac::phase_siviero3;
 }
 
-@ARGV or die "Usage: $0 [option] rdb1 rdb2 ...\n";
-my @rdb = @ARGV;
+my @rdb;
+
+if ($opts{poster}) {
+  $opts{lw} = 4;
+  $opts{ch} = 3;
+  $opts{wedge} = 1;
+  $opts{flare} = 0;
+  $opts{iscale} = 0.86;
+  @rdb = qw| ./collected/hrci_400_erg.rdb ./collected/hrcs_400_erg.rdb |;
+  print STDERR "--poser option chosen, using ", join(', ', @rdb), "\n";
+} else {
+  @ARGV or die "Usage: $0 [option] rdb1 rdb2 ...\n";
+  @rdb = @ARGV;
+}
 
 my ($o, $phase, $rjd, $time, $exptime, $flux, $fluxerr) = (pdl []) x 7;
 
@@ -148,6 +161,10 @@ for my $rdb (@rdb) {
   my ($o1, $phase1, $rjd1, $time1, $exptime1, $flux1, $fluxerr1) = MyRDB::rdb_cols($rdb, @cols) or die;
 
   $_ = pdl $_ for $o1, $phase1, $rjd1, $time1, $exptime1, $flux1, $fluxerr1;
+
+  if ($opts{poster}) {
+    $id eq 'erg' and $_ *= 1e11 for $flux1, $fluxerr1;
+  }
 
   $_ *= $scales{$detnam} for $flux1, $fluxerr1;
 
@@ -228,8 +245,8 @@ $stopi->set(-1, $phase->nelem-1);
 # print "\n";
 
 pgopen($opts{dev}) > 0 or die "could not open $opts{dev}";
-#pgpap(12, .125);
 
+$opts{poster} and pgpap(24, .125);
 
 pgscr(0,1,1,1);
 pgscr(1,0,0,0);
@@ -239,9 +256,10 @@ pgsch($opts{ch});
 pgscf(1);
 
 pgsvp(0.2, 0.9, 0.1, 0.9);
-#pgsvp(0, 1, 0, .125);
+$opts{poster} and pgsvp(0.1, 0.9, 0.1, 0.9);
 my ($y1, $y2) = $flux->minmax;
 pgswin(-0.2, 1.2, 0, $flux->max * 1.1);
+$opts{poster} and pgswin(-0.2, 1.2, 0, $flux->max);
 pgbox('BCNST', 0, 0, 'BCNT', 0, 0);
 
 #pgenv(-.2,1.2,0,$flux->max+($flux->max-$flux->min)*0.1,0,0);
@@ -255,8 +273,20 @@ my $jdmax = $jd->max+.001;# + 180;
 if ($opts{tcolor}) {
   set_ctab($opts{cmap});
   my $jdref = ymd2jd(1999,1,1);
-  my ($y1, $y2) = (1999 + ($jdmin - $jdref) / 365.2425, 1999 + ($jdmax - $jdref) / 365.2425);
-  pgwedg('LI', 4, 3, $y1, $y2, '') if $opts{wedge};
+  my ($y1, $y2);
+
+  if ($opts{poster}) {
+    ($y1, $y2) = (1999 + ($jdmin - $jdref) / 365.2425, 1999 + ($jdmax - $jdref) / 365.2425 + 3);
+    my ($xr, $xl, $yb, $yt);
+    pgqvp(0, $xr, $xl, $yb, $yt);
+    pgsvp(0.3, 0.7, $yb+.1, $yt);
+    pgwedg('BI', -3, 3, $y1, $y2, '');
+    pgsvp($xr, $xl, $yb, $yt);
+  }
+  else {
+    ($y1, $y2) = (1999 + ($jdmin - $jdref) / 365.2425, 1999 + ($jdmax - $jdref) / 365.2425);
+    pgwedg('LI', 4, 3, $y1, $y2, '') if $opts{wedge};
+  }
 }
 
 
@@ -296,6 +326,14 @@ if ($opts{rate}) {
 
 pglab($xlabel, $ylabel, $title);
 
+if ($opts{poster}) {
+  pgtext(0.475, .8, 'Phase');
+  pgsave();
+  pgsch(2.5);
+  pgtext(-.23, $flux->max, 'x10\u-11\d');
+  pgunsa();
+}
+
 if ($opts{pmodel}) {
   plot_model($flux, $phase);
 }
@@ -312,6 +350,7 @@ sub draw_points {
   if ($opts{tcolor}) {
 
     my $ci = xform_ci($jd, $opts{cmap}, $jdmin, $jdmax);
+    $opts{poster} and $ci = xform_ci($jd, $opts{cmap}, $jdmin, $jdmax+365.2425*3);
     for my $i (0..$phase->nelem-1) {
       pgsci($ci->at($i));
       pgpt(1, $phase->at($i), $flux->at($i), 17);
@@ -324,7 +363,7 @@ sub draw_points {
 
     my ($y1, $y2);
     $y1 = 1999.6;
-    $y2 = ($jdmax - $jdmin) / 365.24 + 1999.6;
+    $y2 = ($jdmax - $jdmin) / 365.2425 + 1999.6;
   } else {
     pgpt($phase->nelem,
 	 $phase->float->get_dataref,
