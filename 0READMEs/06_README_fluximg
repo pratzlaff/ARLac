@@ -18,7 +18,7 @@ mkfluxes() {
     eval "for i in {1..$n}"'
     do
         o=$(i_of_n $i '"$n"' $obsids)
-        screen -S '$sname' -X screen bash -c "time ./0READMEs/06_README_fluximg $o; #exec bash"
+        screen -S '$sname' -X screen bash -c "time ./0READMEs/06_README_fluximg $o; exec bash"
     done'
     screen -S $sname -p0 -X kill
     screen -rS $sname
