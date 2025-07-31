@@ -185,13 +185,18 @@ if ($opts{tdur}) {
   $evt = "$outdir/evt2_tfilter$opts{postfix}.fits";
   my $dtfstats = "$outdir/dtfstats$opts{postfix}.fits",
 
+  my $errignore_old = $opts{errignore};
+  $opts{errignore} = 1;
   _run_command('punlearn', 'hrc_dtfstats');
-  _run_command('hrc_dtfstats',
-	       'infile=' . $dtf,
-	       'outfile=' . $dtfstats,
-	       'gtifile=' . $evt . '[gti]',
-	       'clobber=yes',
-	      );
+  if (_run_command('hrc_dtfstats',
+			    'infile=' . $dtf,
+			    'outfile=' . $dtfstats,
+			    'gtifile=' . $evt . '[gti]',
+			    'clobber=yes',
+		  )) {
+    exit(0);
+  }
+  $opts{errignore} = $errignore_old;
 
   my $hdr = Astro::FITS::CFITSIO::fits_read_header($evt.'[events]');
   my ($dtcor) = read_bintbl_cols($dtfstats, 'dtcor', { extname => 'dtfstats' });
@@ -471,6 +476,7 @@ sub _run_command {
   if ($opts{'exec'}) {
     system($cmd, @args);
     die unless ($opts{errignore} or $? == 0);
+    return $?;
   }
 }
 
