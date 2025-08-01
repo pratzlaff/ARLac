@@ -1,7 +1,6 @@
 #! /bin/bash
 
-set -e
-set -o pipefail
+set -eo pipefail
 
 #
 # download data
@@ -15,12 +14,11 @@ ciao -o
 . src/functions.bash
 
 # list of obsids
-obsids=$($perl -I./src -MARLac -le 'print join " ", ARLac::obsids()')
 obsids=$(obsids)
 
 mkdir -p $datadir
 cd $datadir
 for o in $obsids
 do
-  download_chandra_obsid $o evt1,bpix,asol,msk,flt,dtf 2>&1
+  download_chandra_obsid $o mtl,evt1,asol,msk,flt,dtf 2>&1
 done

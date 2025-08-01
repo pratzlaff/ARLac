@@ -1,13 +1,12 @@
 datadir=/data/legs/rpete/data/ARLac
 
-[[ `hostname` = @(milagro|legs) ]] &&
-    perl=perl ||
-    perl='/proj/axaf/bin/perl'
+perl='/proj/axaf/bin/perl'
 
 obsids()
 {
-    obsids=$(perl -I./src -MARLac -le 'print join(" ", ARLac::obsids())')
-    obsids="28406 $(seq 28408 28426)"
+    obsids=$($perl -I./src -MARLac -le 'print join(" ", ARLac::obsids())')
+    obsids=$($perl -I./src -MARLac -le 'print join(" ", ARLac::hrci_obsids())')
+    obsids=$(seq 29562 29582)
     echo $obsids
 }
 

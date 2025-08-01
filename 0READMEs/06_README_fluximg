@@ -1,7 +1,6 @@
 #! /bin/bash
 
-set -e
-set -o pipefail
+set -eo pipefail
 
 mkfluxes() {
     n=21
@@ -13,6 +12,7 @@ mkfluxes() {
     obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::hrci_obsids()")
     obsids=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids()")
     obsids=$(obsids)
+    obsids=$(seq 29562 29582)
     sname=arlac
     screen -dmS $sname
     eval "for i in {1..$n}"'
@@ -47,7 +47,7 @@ i_qe_dir=/data/legs/rpete/flight/hrci_qe/N00${i_qe}/qe
 s_qe=17
 s_qe_dir=/data/legs/rpete/flight/hrcs_qe/N00${s_qe}/qe
 
-s_qeu=20
+s_qeu=22
 s_qeu_dir=/data/legs/rpete/flight/hrcs_qeu/ARD/v${s_qeu}/qeu
 
 # Don't do this until all instrument maps are ready to be recreated

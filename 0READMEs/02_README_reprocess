@@ -1,7 +1,6 @@
 #! /bin/bash
 
-set -e
-set -o pipefail
+set -eo pipefail
 
 i=$1
 n=$2
@@ -17,7 +16,6 @@ ciao -o
 tg_reprocess=/data/legs/rpete/flight/devel/tg_reprocess
 
 # list of obsids
-#obs=$($perl -I./src -MARLac -le "print join ' ', ARLac::obsids($i,$n)")
 obsids=$(obsids)
 
 # whether to force reprocessing if tg_reprocess output already exists
@@ -30,6 +28,6 @@ do
 
     [ -f $outdir/*_evt2.fits -a $force -eq 0 ] && continue
 
-    $perl $tg_reprocess --badpix=CALDB $dir --dtffilter=0.98 2>&1 | tee $dir/tg_reprocess.log
-    rm $outdir/*evt1{,a}.fits
+    $perl $tg_reprocess $dir --dtffilter=0.9 2>&1 | tee $dir/tg_reprocess.log
+    rm -f $outdir/*evt1{,_ssc,a}.fits
 done

@@ -6,7 +6,7 @@ set -o pipefail
 outdir=./collected
 mkdir -p "$outdir"
 
-for det in hrci #hrcs
+for det in hrci hrcs
 do
     for id in erg ph
     do

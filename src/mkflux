@@ -151,7 +151,7 @@ if (! -f $cellfile or $opts{forcecell}) {
   _run_command("celldetect",
 	       "infile=$evt",
 	       "outfile=$cellfile",
-	       "fixedcell=6",
+	       "fixedcell=9",
 	       'maxlogicalwindow=2048',
 	       "clobber=yes",
 	      );
