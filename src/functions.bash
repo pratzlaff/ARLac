@@ -7,6 +7,7 @@ obsids()
     obsids=$($perl -I./src -MARLac -le 'print join(" ", ARLac::obsids())')
     obsids=$($perl -I./src -MARLac -le 'print join(" ", ARLac::hrci_obsids())')
     obsids=$(seq 29562 29582)
+    obsids='31895 31358 31359 31360 31362 31896'
     echo $obsids
 }
 
@@ -23,7 +24,7 @@ hrcs_obsids()
 instruments()
 {
     local obsid="$1"
-    local f=$(ls $datadir/"$obsid"/tg_reprocess/*_evt2.fits 2>/dev/null)
+    local f=$(\ls $datadir/"$obsid"/tg_reprocess/*_evt2.fits 2>/dev/null)
     echo $(detnam "$f")/$(grating "$f")
 }
 
@@ -46,7 +47,7 @@ file_from_obsid()
     local obsid="$1"
     local subdir="$2"
     local ftype="$3"
-    ls $datadir/"$obsid"/$subdir/*_"${ftype}".fits* 2>/dev/null | tail -1
+    \ls $datadir/"$obsid"/$subdir/*_"${ftype}".fits* 2>/dev/null | tail -1
 }
 
 dtf1_file()
@@ -78,7 +79,7 @@ evt2_bin()
 	local outdtfstat="$outdir/dtfstat_"$(printf "%02d" $i)'.fits'
 	dmcopy "$evt2""[time=$start:$stop]" "$outevt2" clobber=yes
 
-	instruments $obsid | grep -qi hrc && {
+	instruments $obsid | \grep -qi hrc && {
 	    punlearn hrc_dtfstats
 	    hrc_dtfstats \
 		infile="$dtf1" \
