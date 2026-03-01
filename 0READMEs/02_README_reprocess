@@ -2,8 +2,9 @@
 
 set -eo pipefail
 
-i=$1
-n=$2
+# time parallel -j 32 ./0READMEs/02_README_reprocess ::: $(obsids)
+
+obsids="$@"
 
 . ~/.bash_aliases
 shopt -s expand_aliases
@@ -14,9 +15,6 @@ ciao -o
 . /data/legs/rpete/flight/analysis_functions/tmppdir.bash
 
 tg_reprocess=/data/legs/rpete/flight/devel/tg_reprocess
-
-# list of obsids
-obsids=$(obsids)
 
 # whether to force reprocessing if tg_reprocess output already exists
 force=1

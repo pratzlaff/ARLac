@@ -4,14 +4,17 @@
 #set -e
 set -o pipefail
 
-. src/functions.bash
+# time parallel -j 32 ./0READMEs/03_README_binspec ::: $(obsids)
+
+obsids="$@"
 
 . ~/.bash_aliases
 shopt -s expand_aliases
 
 ciao -o
 
-obsids=$(obsids)
+. src/functions.bash
+. /data/legs/rpete/flight/analysis_functions/tmppdir.bash
 
 for o in $obsids
 do
