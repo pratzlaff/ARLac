@@ -1,45 +1,5 @@
 #! /usr/bin/perl
 
-=head1 NAME
-
-template - A template for Perl programs.
-
-=head1 SYNOPSIS
-
-cp template newprog
-
-=head1 DESCRIPTION
-
-blah blah blah
-
-=head1 OPTIONS
-
-=over 4
-
-=item --help
-
-Show help and exit.
-
-=item --version
-
-Show version and exit.
-
-=back
-
-=head1 AUTHOR
-
-Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> May 2012
-
-=head1 SEE ALSO
-
-perl(1).
-
-=cut
-
-sub _help {
-  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
-}
-
 use warnings;
 use strict;
 
@@ -89,7 +49,7 @@ GetOptions(\%opts,
 	   'dev=s',
 	   'tcolor!', 'cmap=s', 'wedge!', 'rcmap!',
 	   'lw=f', 'ch=f', 'title=s',
-	   'mfile=s', 'pmodel!', 'model=s', 'flare!',
+	   'pmodel!', 'model=s', 'flare!',
 	   'iter!', 'zerofluxerr!', 'bad!',
 	   'rodono!', 'lu!', 'siviero1!', 'siviero3!', 'norm=f',
 	   'iscale=f', 'sscale=f', 'rate!',
@@ -592,31 +552,91 @@ sub model_bands {
   return $phase, $best_fit, $intensity->minimum, $intensity->maximum;
 }
 
+sub _help {
+  exec("$Config{installbin}/perldoc", '-F', $FindBin::Bin . '/' . $FindBin::RealScript);
+}
+
 sub _version {
   print $version,"\n";
   exit 0;
 }
 
-__DATA__
-sub help {
-  print <<EOP;
-Usage: $0 [options]
+=head1 NAME
 
-    --help     show help and exit
-    --obsids=s   code to eval for getting obsids
-    --notcolor color points on vignette correction instead of time of obs
-    --cmap=s which colormap to use for time coloring
-    --nowedge  do not plot a wedge annotation for time colors
-    --hrci     use HRC-I obsids
-    --hrcs     use HRC-S obsids
-    --dev=s    PGPLOT device to use for final plot
-    --flux     plot fluxes instead of manually-corrected rates
-    --noqetcorr do not correct HRC-S rates by 1% per year since 2000
-    --spectrum=s spectral model filename
-    --mfile=s    path to model file (lc_models/arlac_xlc_constb2.5.dat)
-    --model=s    which model to plot (default is "05")
-    --nopmodel    do not plot the light curve model
+plotlc - Plot AR Lac light curve.
 
-EOP
-  exit 0;
-}
+=head1 SYNOPSIS
+
+plotlc file1.rdb file2.rdb ...
+
+=head1 DESCRIPTION
+
+Plot AR Lac light curve, given input  RDB files containing flux data.
+
+=head1 OPTIONS
+
+=over 4
+
+=item --help
+
+Show help and exit.
+
+=item --version
+
+Show version and exit.
+
+=item --obsids=s
+
+Code to eval for getting obsids.
+
+=item --notcolor
+
+Color points on vignette correction instead of time of obs.
+
+=item --cmap=s
+
+Which colormap to use for time coloring.
+
+=item --norcmap
+
+Do not reverse color map.
+
+=item --nowedge
+
+Do not plot a wedge annotation for time colors.
+
+=item --hrci
+
+Use HRC-I obsids.
+
+=item --hrcs
+
+Use HRC-S obsids.
+
+=item --dev=s
+
+PGPLOT device to use for final plot.
+
+=item --flux
+
+Plot fluxes instead of manually-corrected rates
+
+=item --model=s
+
+Which model to plot (default is "05").
+
+=item --nopmodel
+
+Do not plot the light curve model
+
+=back
+
+=head1 AUTHOR
+
+Pete Ratzlaff E<lt>pratzlaff@cfa.harvard.eduE<gt> Feb 2026
+
+=head1 SEE ALSO
+
+perl(1).
+
+=cut
