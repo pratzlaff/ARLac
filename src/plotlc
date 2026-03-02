@@ -69,6 +69,7 @@ my %default_opts = (
 		    wedge => 1,
 		    title => '',
 		    cmap => 'pastel', # time colormap
+		    rcmap => 1,
 		    flux => 0,
 		    lw => 3,
 		    ch => 1.1,
@@ -86,7 +87,7 @@ my %opts = %default_opts;
 GetOptions(\%opts,
 	   'help!', 'version!', 'debug!',
 	   'dev=s',
-	   'tcolor!', 'cmap=s', 'wedge!',
+	   'tcolor!', 'cmap=s', 'wedge!', 'rcmap!',
 	   'lw=f', 'ch=f', 'title=s',
 	   'mfile=s', 'pmodel!', 'model=s', 'flare!',
 	   'iter!', 'zerofluxerr!', 'bad!',
@@ -404,6 +405,12 @@ sub set_ctab {
   # FIXME: default ramp seems to have a bug
   #$l->set(153, 0.5*($l->at(152)+$l->at(154)));
   $l = sequence(256)/255;
+
+  if ($opts{rcmap}) {
+    # could also do this by reversing FG and BG in pgwedg() (and
+    # similar in xform_ci()), but giza doesn't treat it properly.
+    $_ = $_->slice('-1:0') for $r, $g, $b;
+  }
 
   pgctab(
 	 $l->float->get_dataref,
