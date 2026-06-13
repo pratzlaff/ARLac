@@ -7,7 +7,7 @@ obsids()
     obsids=$($perl -I./src -MARLac -le 'print join(" ", ARLac::obsids())')
     obsids=$($perl -I./src -MARLac -le 'print join(" ", ARLac::hrci_obsids())')
     obsids=$(seq 29562 29582)
-    obsids='31895 31358 31359 31360 31362 31896'
+    obsids='32357 32358'
     echo $obsids
 }
 
@@ -97,7 +97,7 @@ evt2_bin()
 
 	}
 
-	((i++))
+	((++i))
 	[[ $i > 99 ]] && { echo "stopping with i=$i" 1>&2; return 1; }
 
     done
